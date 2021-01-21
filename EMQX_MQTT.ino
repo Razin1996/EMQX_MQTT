@@ -1,13 +1,14 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 // WiFi
 const char* ssid = "Onutiative";
 const char* password = "P@$50fW1f1";
 
 // MQTT Broker
-const char *mqtt_broker = "192.168.0.108";
-const char *topic1 = "esp8266/test";
+const char *mqtt_broker = "103.98.206.92";
+const char *topic1 = "machine_id";
 //const char *topic2 = "esp8266/pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
@@ -20,6 +21,10 @@ const int mqtt_port = 1883;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+ char msgC;
+ String msgS;
+ String command;
+ StaticJsonBuffer<512> jsonBuffer;
 void setup() {
  // Set software serial baud to 115200;
  Serial.begin(115200);
@@ -46,13 +51,10 @@ void setup() {
      }
  }
  // publish and subscribe
- if(client.subscribe(topic1)){
-    Serial.println("message received");
-  }
-  else{Serial.println("message not received");}
-// if(client.subscribe(topic1)){
+  client.subscribe(topic1);
+
 //    client.publish(topic2, "hello user");
-//  }
+
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -60,9 +62,15 @@ void callback(char *topic, byte *payload, unsigned int length) {
  Serial.println(topic);
  Serial.print("Message:");
  for (int i = 0; i < length; i++) {
-     Serial.print((char) payload[i]);
+     msgC = (char) payload[i];
+     String temp = String(msgC);
+     msgS = msgS + temp;
+     
  }
- Serial.println();
+  JsonObject& object = jsonBuffer.parseObject(msgS);
+ //command = object.get<String>("command");
+ command = object.get<String>("command");
+ Serial.println(command);
  Serial.println("-----------------------");
 }
 
