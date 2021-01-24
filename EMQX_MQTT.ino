@@ -25,7 +25,6 @@ PubSubClient client(espClient);
  String msgS;
  String command;
  String message;
- StaticJsonBuffer<512> jsonBuffer;
 void setup() {
  // Set software serial baud to 115200;
  Serial.begin(115200);
@@ -68,13 +67,18 @@ void callback(char *topic, byte *payload, unsigned int length) {
      msgS = msgS + temp;
      
  }
-  JsonObject& object = jsonBuffer.parseObject(msgS);
- //command = object.get<String>("command");
- command = object.get<String>("command");
- message = object.get<String>("message",[1]);
- Serial.println(command);
- Serial.println(message);
- Serial.println("-----------------------");
+  messageDecoder(msgS);
+}
+
+void messageDecoder(String response){
+  DynamicJsonDocument doc(2048);
+  deserializeJson(doc, response);
+  JsonArray repos = doc["message"];
+  for (JsonObject repo : repos) {
+    Serial.println("");
+    Serial.print("Dispancer: ");
+    Serial.println(repo["dispancer_id"].as<int>());
+  }
 }
 
 void loop() {
