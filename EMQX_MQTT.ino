@@ -1,10 +1,27 @@
+#include <Arduino.h>
+#include <String.h>
+#include <EEPROM.h>
+#include <ESP8266WiFiMulti.h>
+#include <WiFiClient.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <ArduinoJson.h>
 
 // WiFi
-const char* ssid = "Onutiative";
-const char* password = "P@$50fW1f1";
+const char* WIFI_SSID = "Onutiative";
+const char* WIFI_PASSWORD = "P@$50fW1f1";
+#define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
+#define connection 15                                             // connect to D1 pin of NodeMCU from green led
+#define motor_positive 4                                          // connect to D2 pin of NodeMCU
+#define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
+#define TX1 2                                                     // NOT connected to D4 pin of NodeMCU
+#define motor_negative 14                                         // connect to D5 pin of NodeMCU
+#define rotation_input 12                                         // connect to D6 pin of NodeMCU
+#define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
+#define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
+#define buzzer 1 
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -20,16 +37,24 @@ const int mqtt_port = 1883;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+ESP8266WiFiMulti WifiMulti;
+
+int A=0,B=0,fb=0;
+boolean default_status = 0;
+boolean database_connected = 0;
+boolean resetToDefault = 0;
+boolean end_of_line = 0;
+boolean disabl = 0;
+volatile boolean rotation_count = 0;
 
  char msgC;
  String msgS;
- String command;
- String message;
+ 
 void setup() {
  // Set software serial baud to 115200;
  Serial.begin(115200);
  // connecting to a WiFi network
- WiFi.begin(ssid, password);
+ WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
  while (WiFi.status() != WL_CONNECTED) {
      delay(500);
      Serial.println("Connecting to WiFi..");
@@ -53,7 +78,26 @@ void setup() {
  // publish and subscribe
   client.subscribe(topic1);
 
-//    client.publish(topic2, "hello user");
+////Serial1.begin(115200);
+//  int count = 0;
+//  pinMode(connection, OUTPUT);
+//  pinMode(disconnection, OUTPUT);
+//  pinMode(busy, OUTPUT);
+//  pinMode(buzzer, OUTPUT);
+//  pinMode(motor_positive, OUTPUT);
+//  pinMode(motor_negative, OUTPUT);
+//  pinMode(rotation_input, INPUT_PULLUP); 
+//  pinMode(limit, INPUT_PULLUP);
+//  digitalWrite(busy, HIGH);
+//  digitalWrite(connection, LOW);
+//  digitalWrite(disconnection,LOW);
+//  digitalWrite(buzzer, HIGH);
+//  delay(100);
+//  digitalWrite(buzzer, LOW);
+//  digitalWrite(motor_positive, LOW);
+//  digitalWrite(motor_negative, LOW);
+//
+//  Serial.println("Program Started");
 
 }
 
@@ -67,8 +111,26 @@ void callback(char *topic, byte *payload, unsigned int length) {
      msgS = msgS + temp;
      
  }
-  messageDecoder(msgS);
+   messageDecoder(msgS);
+   String abcd = commandDecoder(msgS);
+  if(abcd == "DISPENSE"){
+      Serial.println("dispensing");
+      dispense();
+    }
 }
+
+void loop() {
+ client.loop();
+ Serial.println("HELLO");
+// delay(100);
+// if(A > 0){
+//  dispense();
+// }
+// yield();
+// delay(100);
+}
+
+
 
 void messageDecoder(String response){
   DynamicJsonDocument doc(2048);
@@ -76,11 +138,140 @@ void messageDecoder(String response){
   JsonArray repos = doc["message"];
   for (JsonObject repo : repos) {
     Serial.println("");
-    Serial.print("Dispancer: ");
+    Serial.print("Dispenser: ");
     Serial.println(repo["dispancer_id"].as<int>());
+    A = repo["quantity"].as<int>();
+    //Serial.println(A);
   }
 }
 
-void loop() {
- client.loop();
+String commandDecoder(String response){
+  DynamicJsonDocument doc(2048);
+  deserializeJson(doc, response);
+  auto command = doc["command"].as<char*>();
+  //Serial.println(command);
+  return command;
 }
+
+//void readRFID(){
+//  delay(10);
+//  if (rdm6300.update()){
+//    digitalWrite(busy, HIGH);
+//    digitalWrite(connection, LOW);
+//    digitalWrite(disconnection, HIGH);
+//    digitalWrite(buzzer,HIGH);
+//    delay(100);
+//    digitalWrite(buzzer,LOW);
+//    String rfId= String(rdm6300.get_tag_id(),HEX);
+//    Serial1.println(rfId);
+//    A++;
+//    rdm6300.end();
+//    delay(100);
+//    rdm6300.begin(RDM6300_RX_PIN);
+//    rfid_card_status = 0;
+//    ledIndicator();
+//  }
+//}
+
+void dispense(){
+  while(A > 0){
+    if(digitalRead(rotation_input) == 0 ){
+      while(digitalRead(rotation_input) == 0){
+        digitalWrite(motor_positive, HIGH);
+        digitalWrite(motor_negative, LOW);
+        delay(200);
+        if(!digitalRead(limit))
+          end_of_line = 1;        
+        Serial.println("Dispensed1");
+        yield();
+      }
+    }
+    if(digitalRead(rotation_input)){
+      while(digitalRead(rotation_input)){
+        digitalWrite(motor_positive, HIGH);
+        digitalWrite(motor_negative, LOW);
+        delay(200);
+        if(!digitalRead(limit))
+          end_of_line = 1;
+        Serial.println("Dispensed2");
+        yield();
+      }
+      while(digitalRead(rotation_input) == 0){
+        digitalWrite(motor_positive, HIGH);
+        digitalWrite(motor_negative, LOW);
+        delay(200);
+        if(!digitalRead(limit))
+          end_of_line = 1;
+        Serial.println("Dispensed3");
+        yield(); 
+      }
+      digitalWrite(motor_positive, LOW); 
+      digitalWrite(motor_negative, LOW);
+      digitalWrite(busy, HIGH);
+      digitalWrite(connection, HIGH);
+      A--;
+//      do{
+//        Serial1.println(A);
+//        JsonObject& object = jsonBuffer.createObject();
+//        object["A"] = A;
+//        JsonObject& feedback = putFirebaseData("product.json", object);
+//        fb = feedback.get<int>("A");
+//        jsonBuffer.clear();
+//        yield();
+//        ledIndicator();
+//        digitalWrite(busy, HIGH);
+//      }while(A != fb);
+    }
+    if(end_of_line){
+      if(digitalRead(limit) == 0){
+        digitalWrite(motor_positive, LOW);
+        digitalWrite(motor_negative, HIGH);
+        delay(10000);
+      }
+      if(digitalRead(limit)){
+        while(digitalRead(limit)){
+          digitalWrite(motor_positive, LOW);
+          digitalWrite(motor_negative, HIGH);
+          delay(200);
+          yield();
+        }
+        digitalWrite(motor_positive, LOW);
+        digitalWrite(motor_negative, LOW);
+        delay(500);
+        while(!digitalRead(limit)){
+          digitalWrite(motor_positive, HIGH);
+          digitalWrite(motor_negative, LOW);
+          delay(200);
+          yield();            
+        }
+        digitalWrite(motor_positive, LOW);
+        digitalWrite(motor_negative, LOW);
+      }
+      end_of_line = 0;
+    }
+    yield();
+  }
+  digitalWrite(connection, LOW);
+  digitalWrite(motor_positive, LOW);
+  digitalWrite(motor_negative, LOW);
+}
+//
+//void ledIndicator(){
+//  if(database_connected){
+//    if(default_status){
+//      digitalWrite(busy, HIGH);
+//      digitalWrite(connection, LOW);
+//      digitalWrite(disconnection, LOW);
+//    }
+//    else{
+//      digitalWrite(busy, LOW);
+//      digitalWrite(connection, HIGH);
+//      digitalWrite(disconnection, LOW);      
+//    }
+//  }
+//  else{
+//    digitalWrite(busy, LOW);
+//    digitalWrite(connection, LOW);
+//    digitalWrite(disconnection, HIGH);      
+//  }
+//}
