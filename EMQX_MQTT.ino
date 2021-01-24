@@ -24,6 +24,7 @@ PubSubClient client(espClient);
  char msgC;
  String msgS;
  String command;
+ String message;
  StaticJsonBuffer<512> jsonBuffer;
 void setup() {
  // Set software serial baud to 115200;
@@ -70,7 +71,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
   JsonObject& object = jsonBuffer.parseObject(msgS);
  //command = object.get<String>("command");
  command = object.get<String>("command");
+ message = object.get<String>("message",[1]);
  Serial.println(command);
+ Serial.println(message);
  Serial.println("-----------------------");
 }
 
