@@ -39,16 +39,17 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
-int A=0,B=0,fb=0;
+int quantity=0,B=0,fb=0;
 boolean default_status = 0;
 boolean database_connected = 0;
 boolean resetToDefault = 0;
 boolean end_of_line = 0;
-boolean disabl = 0;
+boolean disable = 0;
+boolean lock = 0;
 volatile boolean rotation_count = 0;
 
- char msgC;
- String msgS;
+char msgC;
+String msgS;
  
 void setup() {
  // Set software serial baud to 115200;
@@ -112,22 +113,34 @@ void callback(char *topic, byte *payload, unsigned int length) {
      
  }
    messageDecoder(msgS);
-   String abcd = commandDecoder(msgS);
-  if(abcd == "DISPENSE"){
+   String command = commandDecoder(msgS);
+   if(command == "DISPENSE"){
       Serial.println("dispensing");
       dispense();
     }
+    else if(command == "SETTINGS"){
+      Serial.println("settings changed");
+      settings_change();
+      }
+    else if(command == "DISABLE"){
+      disable = 1;
+      }
+    else if(command == "LOCK"){
+      lock = 1;
+      }
+    else if(command == "STATUS_QUERY"){
+      send_status();
+      }
+    else if(command == "REFILL"){
+      
+      }
+    else if(command == "DISCARD"){
+      
+      }
 }
 
 void loop() {
  client.loop();
- Serial.println("HELLO");
-// delay(100);
-// if(A > 0){
-//  dispense();
-// }
-// yield();
-// delay(100);
 }
 
 
@@ -140,7 +153,7 @@ void messageDecoder(String response){
     Serial.println("");
     Serial.print("Dispenser: ");
     Serial.println(repo["dispancer_id"].as<int>());
-    A = repo["quantity"].as<int>();
+    quantity = repo["quantity"].as<int>();
     //Serial.println(A);
   }
 }
@@ -174,7 +187,7 @@ String commandDecoder(String response){
 //}
 
 void dispense(){
-  while(A > 0){
+  while(quantity > 0){
     if(digitalRead(rotation_input) == 0 ){
       while(digitalRead(rotation_input) == 0){
         digitalWrite(motor_positive, HIGH);
@@ -209,7 +222,7 @@ void dispense(){
       digitalWrite(motor_negative, LOW);
       digitalWrite(busy, HIGH);
       digitalWrite(connection, HIGH);
-      A--;
+      quantity--;
 //      do{
 //        Serial1.println(A);
 //        JsonObject& object = jsonBuffer.createObject();
@@ -255,23 +268,55 @@ void dispense(){
   digitalWrite(motor_positive, LOW);
   digitalWrite(motor_negative, LOW);
 }
-//
-//void ledIndicator(){
-//  if(database_connected){
-//    if(default_status){
-//      digitalWrite(busy, HIGH);
-//      digitalWrite(connection, LOW);
-//      digitalWrite(disconnection, LOW);
-//    }
-//    else{
-//      digitalWrite(busy, LOW);
-//      digitalWrite(connection, HIGH);
-//      digitalWrite(disconnection, LOW);      
-//    }
-//  }
-//  else{
-//    digitalWrite(busy, LOW);
-//    digitalWrite(connection, LOW);
-//    digitalWrite(disconnection, HIGH);      
-//  }
-//}
+
+void settings_change(){
+    DynamicJsonDocument doc(2048);
+    deserializeJson(doc, response);
+    auto WIFI_SSID = doc["ssid"].as<char*>();
+    auto WIFI_PASSWORD = doc["password"].as<char*>();
+    Serial1.print(WIFI_SSID);
+    Serial1.print("\t");
+    Serial1.println(WIFI_PASSWORD);
+    delay(10);              
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial1.print("Connecting to ");
+    Serial1.print(WIFI_SSID);
+    while (WiFi.status() != WL_CONNECTED) {
+      Serial1.print(".");
+      /*if(digitalRead(rst) == 0){
+        break;
+      }*/
+      yield();
+      delay(1000);
+    }
+    Serial1.println();
+    Serial1.print("Connected to ");
+    Serial1.println(WIFI_SSID);
+    Serial1.print("IP Address is : ");
+    Serial1.println(WiFi.localIP());
+    default_status = 0;
+  }
+
+void send_status(){
+  
+  }
+
+void ledIndicator(){
+  if(database_connected){
+    if(default_status){
+      digitalWrite(busy, HIGH);
+      digitalWrite(connection, LOW);
+      digitalWrite(disconnection, LOW);
+    }
+    else{
+      digitalWrite(busy, LOW);
+      digitalWrite(connection, HIGH);
+      digitalWrite(disconnection, LOW);      
+    }
+  }
+  else{
+    digitalWrite(busy, LOW);
+    digitalWrite(connection, LOW);
+    digitalWrite(disconnection, HIGH);      
+  }
+}
