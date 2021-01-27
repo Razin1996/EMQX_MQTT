@@ -120,7 +120,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
     }
     else if(command == "SETTINGS"){
       Serial.println("settings changed");
-      settings_change();
+      settings_change(msgS);
       }
     else if(command == "DISABLE"){
       disable = 1;
@@ -269,7 +269,7 @@ void dispense(){
   digitalWrite(motor_negative, LOW);
 }
 
-void settings_change(){
+void settings_change(String response){
     DynamicJsonDocument doc(2048);
     deserializeJson(doc, response);
     auto WIFI_SSID = doc["ssid"].as<char*>();
