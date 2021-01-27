@@ -139,13 +139,6 @@ void loop() {
  client.loop();
 }
 
-
-// local msg parser
-// default wifi & user ap
-// disable EEPROM
-// check disable/enable in callback
-
-
 void messageDecoderDispense(String response){
   DynamicJsonDocument doc(2048);
   deserializeJson(doc, response);
