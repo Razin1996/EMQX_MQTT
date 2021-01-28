@@ -39,7 +39,8 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
-int quantity=0,B=0,fb=0;
+int quantity=0;
+int B=0,fb=0;
 int is_disable = 0;
 int is_door_lock = 1;
 boolean default_status = 0;
@@ -57,6 +58,26 @@ void setup() {
  // Set software serial baud to 115200;
  Serial.begin(115200);
 
+   int count = 0;
+  pinMode(connection, OUTPUT);
+  pinMode(disconnection, OUTPUT);
+  pinMode(busy, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(motor_positive, OUTPUT);
+  pinMode(motor_negative, OUTPUT);
+  pinMode(rotation_input, INPUT_PULLUP); 
+  pinMode(limit, INPUT_PULLUP);
+  digitalWrite(busy, HIGH);
+  digitalWrite(connection, LOW);
+  digitalWrite(disconnection,LOW);
+  digitalWrite(buzzer, HIGH);
+  delay(100);
+  digitalWrite(buzzer, LOW);
+  digitalWrite(motor_positive, LOW);
+  digitalWrite(motor_negative, LOW);
+
+  Serial.println("Program Started");
+ 
  EEPROM.begin(512);
  if(EEPROM.read(100) == 55)
     user_ap();
@@ -81,25 +102,6 @@ void setup() {
   client.subscribe(topic1);
 
 ////Serial1.begin(115200);
-//  int count = 0;
-//  pinMode(connection, OUTPUT);
-//  pinMode(disconnection, OUTPUT);
-//  pinMode(busy, OUTPUT);
-//  pinMode(buzzer, OUTPUT);
-//  pinMode(motor_positive, OUTPUT);
-//  pinMode(motor_negative, OUTPUT);
-//  pinMode(rotation_input, INPUT_PULLUP); 
-//  pinMode(limit, INPUT_PULLUP);
-//  digitalWrite(busy, HIGH);
-//  digitalWrite(connection, LOW);
-//  digitalWrite(disconnection,LOW);
-//  digitalWrite(buzzer, HIGH);
-//  delay(100);
-//  digitalWrite(buzzer, LOW);
-//  digitalWrite(motor_positive, LOW);
-//  digitalWrite(motor_negative, LOW);
-//
-//  Serial.println("Program Started");
 
 }
 
@@ -118,7 +120,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
    if(command == "DISPENSE"){
       Serial.println("dispensing");
       messageDecoderDispense(msgS);
-      dispense();
+      for(int i=1; i<=quantity; i++){
+        dispense();
+        }
     }
     else if(command == "SETTINGS"){
       Serial.println("settings changed");
@@ -182,7 +186,8 @@ String commandDecoder(String response){
 
 void dispense(){
   if(is_disable == 0 && is_door_lock == 1){
-    while(quantity > 0){
+    //while(quantity > 0){
+      Serial.println("Dispensing Continue");
       if(digitalRead(rotation_input) == 0 ){
         while(digitalRead(rotation_input) == 0){
           digitalWrite(motor_positive, HIGH);
@@ -214,7 +219,7 @@ void dispense(){
         digitalWrite(motor_negative, LOW);
         digitalWrite(busy, HIGH);
         digitalWrite(connection, HIGH);
-        quantity--;
+       // quantity--;
   //      do{
   //        Serial1.println(A);
   //        JsonObject& object = jsonBuffer.createObject();
@@ -255,7 +260,7 @@ void dispense(){
         end_of_line = 0;
       }
       yield();
-    }
+    //}
   }
   digitalWrite(connection, LOW);
   digitalWrite(motor_positive, LOW);
@@ -269,9 +274,13 @@ void settings_change(String response){
     auto p = doc["message"]["password"].as<char*>();
     is_disable = doc["message"]["is_disable"].as<int>();
     is_door_lock = doc["message"]["is_door_lock"].as<int>();
-    EEPROM.put(0, s);
-    EEPROM.put(16, p);
-    user_ap();
+    Serial.println(s);
+    Serial.println(p);
+    Serial.println(is_disable);
+    Serial.println(is_door_lock);
+    //EEPROM.put(0, s);
+   // EEPROM.put(16, p);
+    //user_ap();
   }
 
 void send_status(){
