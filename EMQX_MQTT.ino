@@ -10,8 +10,10 @@
 #include <ArduinoJson.h>
 
 // WiFi
-const char* WIFI_SSID = "Onutiative";
-const char* WIFI_PASSWORD = "P@$50fW1f1";
+//const char* WIFI_SSID = "Onutiative";
+//const char* WIFI_PASSWORD = "P@$50fW1f1";
+const char* WIFI_SSID = "ASUS";
+const char* WIFI_PASSWORD = "asus2222";
 #define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
 #define connection 15                                             // connect to D1 pin of NodeMCU from green led
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
@@ -26,7 +28,7 @@ const char* WIFI_PASSWORD = "P@$50fW1f1";
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
 const char *topic1 = "machine_id";
-//const char *topic2 = "esp8266/pubsub";
+const char *topic2 = "pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
 const int mqtt_port = 1883;
@@ -39,7 +41,7 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
-int quantity=0;
+//int quantity=0;
 int B=0,fb=0;
 int is_disable = 0;
 int is_door_lock = 1;
@@ -56,7 +58,7 @@ String msgS;
  
 void setup() {
  // Set software serial baud to 115200;
- Serial.begin(115200);
+ Serial1.begin(115200);
 
    int count = 0;
   pinMode(connection, OUTPUT);
@@ -76,7 +78,7 @@ void setup() {
   digitalWrite(motor_positive, LOW);
   digitalWrite(motor_negative, LOW);
 
-  Serial.println("Program Started");
+  Serial1.println("Program Started");
  
  EEPROM.begin(512);
  if(EEPROM.read(100) == 55)
@@ -89,26 +91,27 @@ void setup() {
  while (!client.connected()) {
 //     String client_id = "esp8266-client-";
 //     client_id += String(WiFi.macAddress());
-     Serial.println("Connecting to public emqx mqtt broker.....");
-     if (client.connect("esp8266-vendy2")) {
-         Serial.println("Public emqx mqtt broker connected");
+     Serial1.println("Connecting to public emqx mqtt broker.....");
+     if (client.connect("esp8266-vendy1")) {
+         Serial1.println("Public emqx mqtt broker connected");
      } else {
-         Serial.print("failed with state ");
-         Serial.print(client.state());
+         Serial1.print("failed with state ");
+         Serial1.print(client.state());
          delay(2000);
      }
  }
  // publish and subscribe
   client.subscribe(topic1);
+  client.subscribe(topic2);
 
 ////Serial1.begin(115200);
 
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
- Serial.print("Message arrived in topic: ");
- Serial.println(topic);
- Serial.print("Message:");
+ Serial1.print("Message arrived in topic: ");
+ Serial1.println(topic);
+ Serial1.print("Message:");
  for (int i = 0; i < length; i++) {
      msgC = (char) payload[i];
      String temp = String(msgC);
@@ -118,14 +121,11 @@ void callback(char *topic, byte *payload, unsigned int length) {
  
    String command = commandDecoder(msgS);
    if(command == "DISPENSE"){
-      Serial.println("dispensing");
+      Serial1.println("dispensing");
       messageDecoderDispense(msgS);
-      for(int i=1; i<=quantity; i++){
-        dispense();
-        }
     }
     else if(command == "SETTINGS"){
-      Serial.println("settings changed");
+      Serial1.println("settings changed");
       settings_change(msgS);
       }
     else if(command == "STATUS_QUERY"){
@@ -141,19 +141,23 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
 void loop() {
  client.loop();
+ yield();
 }
 
 void messageDecoderDispense(String response){
   DynamicJsonDocument doc(2048);
   deserializeJson(doc, response);
   JsonArray repos = doc["message"];
+  int dis_quantity;
   for (JsonObject repo : repos) {
-    Serial.println("");
-    Serial.print("Dispenser: ");
-    Serial.println(repo["dispancer_id"].as<int>());
-    quantity = repo["quantity"].as<int>();
-    Serial.println(quantity);
+    Serial1.println("");
+    Serial1.print("Dispenser: ");
+    Serial1.println(repo["message"]["dispancer_id"].as<char*>());
+    dis_quantity = repo["quantity"].as<int>();
+    //quantity = dis_quantity.toInt();
+    Serial1.println(dis_quantity);
   }
+  dispense(dis_quantity);
 }
 
 String commandDecoder(String response){
@@ -184,83 +188,91 @@ String commandDecoder(String response){
 //  }
 //}
 
-void dispense(){
+void dispense(int quantity){
   if(is_disable == 0 && is_door_lock == 1){
-    //while(quantity > 0){
-      Serial.println("Dispensing Continue");
-      if(digitalRead(rotation_input) == 0 ){
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;        
-          yield();
-        }
-      }
-      if(digitalRead(rotation_input)){
-        while(digitalRead(rotation_input)){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield();
-        }
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield(); 
-        }
-        digitalWrite(motor_positive, LOW); 
-        digitalWrite(motor_negative, LOW);
-        digitalWrite(busy, HIGH);
-        digitalWrite(connection, HIGH);
-       // quantity--;
-  //      do{
-  //        Serial1.println(A);
-  //        JsonObject& object = jsonBuffer.createObject();
-  //        object["A"] = A;
-  //        JsonObject& feedback = putFirebaseData("product.json", object);
-  //        fb = feedback.get<int>("A");
-  //        jsonBuffer.clear();
-  //        yield();
-  //        ledIndicator();
-  //        digitalWrite(busy, HIGH);
-  //      }while(A != fb);
-      }
-      if(end_of_line){
-        if(digitalRead(limit) == 0){
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, HIGH);
-          delay(10000);
-        }
-        if(digitalRead(limit)){
-          while(digitalRead(limit)){
-            digitalWrite(motor_positive, LOW);
-            digitalWrite(motor_negative, HIGH);
-            delay(200);
-            yield();
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-          delay(500);
-          while(!digitalRead(limit)){
-            digitalWrite(motor_positive, HIGH);
-            digitalWrite(motor_negative, LOW);
-            delay(200);
-            yield();            
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-        }
-        end_of_line = 0;
-      }
-      yield();
-    //}
+    Serial1.println(quantity);
+    while(quantity > 0){
+      Serial1.println("Dispensing Continue");
+
+        Serial1.println("Dispensing = "+ quantity);
+        quantity--;
+        delay(200);
+        yield();
+       
+//      if(digitalRead(rotation_input) == 0 ){
+//        while(digitalRead(rotation_input) == 0){
+//          digitalWrite(motor_positive, HIGH);
+//          digitalWrite(motor_negative, LOW);
+//          delay(200);
+//          if(!digitalRead(limit))
+//            end_of_line = 1;        
+//          yield();
+//        }
+//      }
+//      if(digitalRead(rotation_input)){
+//        while(digitalRead(rotation_input)){
+//          digitalWrite(motor_positive, HIGH);
+//          digitalWrite(motor_negative, LOW);
+//          delay(200);
+//          if(!digitalRead(limit))
+//            end_of_line = 1;
+//          yield();
+//        }
+//        while(digitalRead(rotation_input) == 0){
+//          digitalWrite(motor_positive, HIGH);
+//          digitalWrite(motor_negative, LOW);
+//          delay(200);
+//          if(!digitalRead(limit))
+//            end_of_line = 1;
+//          yield(); 
+//        }
+//        digitalWrite(motor_positive, LOW); 
+//        digitalWrite(motor_negative, LOW);
+//        digitalWrite(busy, HIGH);
+//        digitalWrite(connection, HIGH);
+//        Serial1.println("Dispensing = "+ quantity);
+//        quantity--;
+//  //      do{
+//  //        Serial1.println(A);
+//  //        JsonObject& object = jsonBuffer.createObject();
+//  //        object["A"] = A;
+//  //        JsonObject& feedback = putFirebaseData("product.json", object);
+//  //        fb = feedback.get<int>("A");
+//  //        jsonBuffer.clear();
+//  //        yield();
+//  //        ledIndicator();
+//  //        digitalWrite(busy, HIGH);
+//  //      }while(A != fb);
+//      }
+//      if(end_of_line){
+//        if(digitalRead(limit) == 0){
+//          digitalWrite(motor_positive, LOW);
+//          digitalWrite(motor_negative, HIGH);
+//          delay(10000);
+//        }
+//        if(digitalRead(limit)){
+//          while(digitalRead(limit)){
+//            digitalWrite(motor_positive, LOW);
+//            digitalWrite(motor_negative, HIGH);
+//            delay(200);
+//            yield();
+//          }
+//          digitalWrite(motor_positive, LOW);
+//          digitalWrite(motor_negative, LOW);
+//          delay(500);
+//          while(!digitalRead(limit)){
+//            digitalWrite(motor_positive, HIGH);
+//            digitalWrite(motor_negative, LOW);
+//            delay(200);
+//            yield();            
+//          }
+//          digitalWrite(motor_positive, LOW);
+//          digitalWrite(motor_negative, LOW);
+//        }
+//        end_of_line = 0;
+//      }
+//      yield();
+    }
   }
   digitalWrite(connection, LOW);
   digitalWrite(motor_positive, LOW);
@@ -274,10 +286,10 @@ void settings_change(String response){
     auto p = doc["message"]["password"].as<char*>();
     is_disable = doc["message"]["is_disable"].as<int>();
     is_door_lock = doc["message"]["is_door_lock"].as<int>();
-    Serial.println(s);
-    Serial.println(p);
-    Serial.println(is_disable);
-    Serial.println(is_door_lock);
+    Serial1.println(s);
+    Serial1.println(p);
+    Serial1.println(is_disable);
+    Serial1.println(is_door_lock);
     //EEPROM.put(0, s);
    // EEPROM.put(16, p);
     //user_ap();
