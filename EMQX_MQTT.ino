@@ -10,10 +10,10 @@
 #include <ArduinoJson.h>
 
 // WiFi
-//const char* WIFI_SSID = "Onutiative";
-//const char* WIFI_PASSWORD = "P@$50fW1f1";
-const char* WIFI_SSID = "ASUS";
-const char* WIFI_PASSWORD = "asus2222";
+const char* WIFI_SSID = "Onutiative";
+const char* WIFI_PASSWORD = "P@$50fW1f1";
+//const char* WIFI_SSID = "ASUS";
+//const char* WIFI_PASSWORD = "asus2222";
 #define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
 #define connection 15                                             // connect to D1 pin of NodeMCU from green led
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
@@ -24,6 +24,7 @@ const char* WIFI_PASSWORD = "asus2222";
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
 #define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
 #define buzzer 1 
+//#define rst 14                                                    // connect to D5 pin of NodeMCU
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -41,7 +42,6 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
-//int quantity=0;
 int B=0,fb=0;
 int is_disable = 0;
 int is_door_lock = 1;
@@ -53,8 +53,6 @@ volatile boolean rotation_count = 0;
 char p[16];
 char s[16];
 
-char msgC;
-String msgS;
  
 void setup() {
  // Set software serial baud to 115200;
@@ -69,6 +67,7 @@ void setup() {
   pinMode(motor_negative, OUTPUT);
   pinMode(rotation_input, INPUT_PULLUP); 
   pinMode(limit, INPUT_PULLUP);
+//  pinMode(rst, INPUT_PULLUP);
   digitalWrite(busy, HIGH);
   digitalWrite(connection, LOW);
   digitalWrite(disconnection,LOW);
@@ -81,6 +80,10 @@ void setup() {
   Serial1.println("Program Started");
  
  EEPROM.begin(512);
+// for (int i = 0; i < 512; i++) {
+//    EEPROM.write(i, 0);
+//  }
+//  EEPROM.end();
  if(EEPROM.read(100) == 55)
     user_ap();
   else
@@ -104,21 +107,20 @@ void setup() {
   client.subscribe(topic1);
   client.subscribe(topic2);
 
-////Serial1.begin(115200);
-
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
  Serial1.print("Message arrived in topic: ");
  Serial1.println(topic);
- Serial1.print("Message:");
+ Serial1.print("Message: ");
+ char msgC;
+ String msgS;
  for (int i = 0; i < length; i++) {
      msgC = (char) payload[i];
      String temp = String(msgC);
      msgS = msgS + temp;
-     
  }
- 
+   Serial1.println(msgS);
    String command = commandDecoder(msgS);
    if(command == "DISPENSE"){
       Serial1.println("dispensing");
@@ -137,11 +139,16 @@ void callback(char *topic, byte *payload, unsigned int length) {
     else if(command == "DISCARD"){
       
       }
+    //client.connect("esp8266-vendy1");
 }
 
 void loop() {
+ if (!client.connected()) {
+    client.connect("esp8266-vendy1");
+    client.subscribe(topic1);
+  }
  client.loop();
- yield();
+
 }
 
 void messageDecoderDispense(String response){
@@ -152,12 +159,13 @@ void messageDecoderDispense(String response){
   for (JsonObject repo : repos) {
     Serial1.println("");
     Serial1.print("Dispenser: ");
-    Serial1.println(repo["message"]["dispancer_id"].as<char*>());
+    Serial1.println(repo["dispenser_id"].as<int>());
     dis_quantity = repo["quantity"].as<int>();
     //quantity = dis_quantity.toInt();
     Serial1.println(dis_quantity);
+    dispense(dis_quantity);
   }
-  dispense(dis_quantity);
+  
 }
 
 String commandDecoder(String response){
@@ -192,86 +200,86 @@ void dispense(int quantity){
   if(is_disable == 0 && is_door_lock == 1){
     Serial1.println(quantity);
     while(quantity > 0){
-      Serial1.println("Dispensing Continue");
-
-        Serial1.println("Dispensing = "+ quantity);
-        quantity--;
-        delay(200);
-        yield();
-       
-//      if(digitalRead(rotation_input) == 0 ){
-//        while(digitalRead(rotation_input) == 0){
-//          digitalWrite(motor_positive, HIGH);
-//          digitalWrite(motor_negative, LOW);
-//          delay(200);
-//          if(!digitalRead(limit))
-//            end_of_line = 1;        
-//          yield();
-//        }
-//      }
-//      if(digitalRead(rotation_input)){
-//        while(digitalRead(rotation_input)){
-//          digitalWrite(motor_positive, HIGH);
-//          digitalWrite(motor_negative, LOW);
-//          delay(200);
-//          if(!digitalRead(limit))
-//            end_of_line = 1;
-//          yield();
-//        }
-//        while(digitalRead(rotation_input) == 0){
-//          digitalWrite(motor_positive, HIGH);
-//          digitalWrite(motor_negative, LOW);
-//          delay(200);
-//          if(!digitalRead(limit))
-//            end_of_line = 1;
-//          yield(); 
-//        }
-//        digitalWrite(motor_positive, LOW); 
-//        digitalWrite(motor_negative, LOW);
-//        digitalWrite(busy, HIGH);
-//        digitalWrite(connection, HIGH);
+//      Serial1.println("Dispensing Continue");
+//
 //        Serial1.println("Dispensing = "+ quantity);
 //        quantity--;
-//  //      do{
-//  //        Serial1.println(A);
-//  //        JsonObject& object = jsonBuffer.createObject();
-//  //        object["A"] = A;
-//  //        JsonObject& feedback = putFirebaseData("product.json", object);
-//  //        fb = feedback.get<int>("A");
-//  //        jsonBuffer.clear();
-//  //        yield();
-//  //        ledIndicator();
-//  //        digitalWrite(busy, HIGH);
-//  //      }while(A != fb);
-//      }
-//      if(end_of_line){
-//        if(digitalRead(limit) == 0){
-//          digitalWrite(motor_positive, LOW);
-//          digitalWrite(motor_negative, HIGH);
-//          delay(10000);
-//        }
-//        if(digitalRead(limit)){
-//          while(digitalRead(limit)){
-//            digitalWrite(motor_positive, LOW);
-//            digitalWrite(motor_negative, HIGH);
-//            delay(200);
-//            yield();
-//          }
-//          digitalWrite(motor_positive, LOW);
-//          digitalWrite(motor_negative, LOW);
-//          delay(500);
-//          while(!digitalRead(limit)){
-//            digitalWrite(motor_positive, HIGH);
-//            digitalWrite(motor_negative, LOW);
-//            delay(200);
-//            yield();            
-//          }
-//          digitalWrite(motor_positive, LOW);
-//          digitalWrite(motor_negative, LOW);
-//        }
-//        end_of_line = 0;
-//      }
-//      yield();
+//        delay(200);
+//        yield();
+       
+      if(digitalRead(rotation_input) == 0 ){
+        while(digitalRead(rotation_input) == 0){
+          digitalWrite(motor_positive, HIGH);
+          digitalWrite(motor_negative, LOW);
+          delay(200);
+          if(!digitalRead(limit))
+            end_of_line = 1;        
+          yield();
+        }
+      }
+      if(digitalRead(rotation_input)){
+        while(digitalRead(rotation_input)){
+          digitalWrite(motor_positive, HIGH);
+          digitalWrite(motor_negative, LOW);
+          delay(200);
+          if(!digitalRead(limit))
+            end_of_line = 1;
+          yield();
+        }
+        while(digitalRead(rotation_input) == 0){
+          digitalWrite(motor_positive, HIGH);
+          digitalWrite(motor_negative, LOW);
+          delay(200);
+          if(!digitalRead(limit))
+            end_of_line = 1;
+          yield(); 
+        }
+        digitalWrite(motor_positive, LOW); 
+        digitalWrite(motor_negative, LOW);
+        digitalWrite(busy, HIGH);
+        digitalWrite(connection, HIGH);
+        Serial1.println("Dispensing = "+ quantity);
+        quantity--;
+  //      do{
+  //        Serial1.println(A);
+  //        JsonObject& object = jsonBuffer.createObject();
+  //        object["A"] = A;
+  //        JsonObject& feedback = putFirebaseData("product.json", object);
+  //        fb = feedback.get<int>("A");
+  //        jsonBuffer.clear();
+  //        yield();
+  //        ledIndicator();
+  //        digitalWrite(busy, HIGH);
+  //      }while(A != fb);
+      }
+      if(end_of_line){
+        if(digitalRead(limit) == 0){
+          digitalWrite(motor_positive, LOW);
+          digitalWrite(motor_negative, HIGH);
+          delay(10000);
+        }
+        if(digitalRead(limit)){
+          while(digitalRead(limit)){
+            digitalWrite(motor_positive, LOW);
+            digitalWrite(motor_negative, HIGH);
+            delay(200);
+            yield();
+          }
+          digitalWrite(motor_positive, LOW);
+          digitalWrite(motor_negative, LOW);
+          delay(500);
+          while(!digitalRead(limit)){
+            digitalWrite(motor_positive, HIGH);
+            digitalWrite(motor_negative, LOW);
+            delay(200);
+            yield();            
+          }
+          digitalWrite(motor_positive, LOW);
+          digitalWrite(motor_negative, LOW);
+        }
+        end_of_line = 0;
+      }
+      yield();
     }
   }
   digitalWrite(connection, LOW);
@@ -282,24 +290,45 @@ void dispense(int quantity){
 void settings_change(String response){
     DynamicJsonDocument doc(2048);
     deserializeJson(doc, response);
-    auto s = doc["message"]["ssid"].as<char*>();
-    auto p = doc["message"]["password"].as<char*>();
+     auto s = doc["message"]["ssid"].as<char*>();
+     auto p = doc["message"]["password"].as<char*>();
     is_disable = doc["message"]["is_disable"].as<int>();
     is_door_lock = doc["message"]["is_door_lock"].as<int>();
     Serial1.println(s);
     Serial1.println(p);
     Serial1.println(is_disable);
     Serial1.println(is_door_lock);
-    //EEPROM.put(0, s);
-   // EEPROM.put(16, p);
-    //user_ap();
+    EEPROM.put(0, s);
+    EEPROM.put(16, p);
+    EEPROM.write(100, 55);
+    //EEPROM.commit();
+//    if(digitalRead(rst) == 0){
+//    int x = 0;
+//    if(default_status == 1){
+//      user_ap();
+//    }
+//    else{
+//      while(digitalRead(rst) ==0){
+//        delay(100);
+//        x++;
+//        if(x>30){
+//          default_ap();
+//          break;
+//        }
+//        yield();
+//      }
+//    }
+//  }
+//    user_ap();
   }
 
 void send_status(){
   
   }
 
-void user_ap(){    
+void user_ap(){  
+      Serial1.println(s);
+    Serial1.println(p);  
     EEPROM.get(0, s);
     Serial1.print(s);
     Serial1.print("\t");
@@ -311,9 +340,9 @@ void user_ap(){
     Serial1.print(s);
     while (WiFi.status() != WL_CONNECTED) {
       Serial1.print(".");
-      /*if(digitalRead(rst) == 0){
-        break;
-      }*/
+//      if(digitalRead(rst) == 0){
+//        break;
+//      }
       yield();
       delay(1000);
     }
