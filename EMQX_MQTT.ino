@@ -10,8 +10,8 @@
 #include <ArduinoJson.h>
 
 // WiFi
-const char* WIFI_SSID = "Onutiative";
-const char* WIFI_PASSWORD = "P@$50fW1f1";
+const char* WIFI_SSID = "BONYASHOVA-3";
+const char* WIFI_PASSWORD = "9294959699";
 //const char* WIFI_SSID = "ASUS";
 //const char* WIFI_PASSWORD = "asus2222";
 #define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
@@ -56,9 +56,9 @@ char s[16];
  
 void setup() {
  // Set software serial baud to 115200;
- Serial1.begin(115200);
+  Serial1.begin(115200);
 
-   int count = 0;
+  int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
   pinMode(busy, OUTPUT);
@@ -81,9 +81,10 @@ void setup() {
  
  EEPROM.begin(512);
 // for (int i = 0; i < 512; i++) {
-//    EEPROM.write(i, 0);
+//    EEPROM.write(i, '0');
 //  }
-//  EEPROM.end();
+  Serial1.print("EEPROM: ");
+  Serial1.println(EEPROM.read(100));
  if(EEPROM.read(100) == 55)
     user_ap();
   else
@@ -290,18 +291,24 @@ void dispense(int quantity){
 void settings_change(String response){
     DynamicJsonDocument doc(2048);
     deserializeJson(doc, response);
-     auto s = doc["message"]["ssid"].as<char*>();
-     auto p = doc["message"]["password"].as<char*>();
+//     auto s = doc["message"]["ssid"].as<char*>();
+//     auto p = doc["message"]["password"].as<char*>();
+     String u_ssid=String(doc["message"]["ssid"].as<char*>());
+     String u_pass=String(doc["message"]["password"].as<char*>());
     is_disable = doc["message"]["is_disable"].as<int>();
     is_door_lock = doc["message"]["is_door_lock"].as<int>();
-    Serial1.println(s);
-    Serial1.println(p);
+    Serial1.println(u_ssid);
+    Serial1.println(u_pass);
+    writeString(0, u_ssid);
+    writeString(16,u_pass);
+    delay(10);
     Serial1.println(is_disable);
     Serial1.println(is_door_lock);
-    EEPROM.put(0, s);
-    EEPROM.put(16, p);
+//    EEPROM.put(0,s);
+//    EEPROM.put(16,p);
     EEPROM.write(100, 55);
-    //EEPROM.commit();
+    EEPROM.commit();
+    delay(10);
 //    if(digitalRead(rst) == 0){
 //    int x = 0;
 //    if(default_status == 1){
@@ -319,7 +326,7 @@ void settings_change(String response){
 //      }
 //    }
 //  }
-//    user_ap();
+    user_ap();
   }
 
 void send_status(){
@@ -327,17 +334,17 @@ void send_status(){
   }
 
 void user_ap(){  
-      Serial1.println(s);
-    Serial1.println(p);  
-    EEPROM.get(0, s);
-    Serial1.print(s);
+//    EEPROM.get(0, s);
+    String ssid=read_String(0);
+    String pass=read_String(16);
+    Serial1.print(ssid);
     Serial1.print("\t");
-    EEPROM.get(16, p);
-    Serial1.println(p);
+//    EEPROM.get(16, p);
+    Serial1.println(pass);
     delay(10);              
-    WiFi.begin(s, p);
-    Serial1.print("Connecting to ");
-    Serial1.print(s);
+    WiFi.begin(ssid, pass);
+    Serial1.print("Connecting to user ");
+    Serial1.print(ssid);
     while (WiFi.status() != WL_CONNECTED) {
       Serial1.print(".");
 //      if(digitalRead(rst) == 0){
@@ -348,7 +355,7 @@ void user_ap(){
     }
     Serial1.println();
     Serial1.print("Connected to ");
-    Serial1.println(s);
+    Serial1.println(ssid);
     Serial1.print("IP Address is : ");
     Serial1.println(WiFi.localIP());
     default_status = 0;
@@ -358,7 +365,7 @@ void default_ap(){
   delay(10);  
    // connecting to a WiFi network           
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial1.print("Connecting to ");
+  Serial1.print("Connecting to defult ");
   Serial1.print(WIFI_SSID);
   int wifi_check = 0;
   while(WiFi.status() != WL_CONNECTED) {
@@ -402,4 +409,35 @@ void ledIndicator(){
     digitalWrite(connection, LOW);
     digitalWrite(disconnection, HIGH);      
   }
+}
+
+//EEPROM
+void writeString(char index,String data)
+{
+  int _size = data.length();
+  int i;
+  for(i=0;i<_size;i++)
+  {
+    EEPROM.write(index+i,data[i]);
+  }
+  EEPROM.write(index+_size,'\0');   //Add termination null character for String Data
+  EEPROM.commit();
+}
+
+
+String read_String(char index)
+{
+  int i;
+  char data[100]; //Max 100 Bytes
+  int len=0;
+  unsigned char k;
+  k=EEPROM.read(index);
+  while(k != '\0' && len<500)   //Read until null character
+  {    
+    k=EEPROM.read(index+len);
+    data[len]=k;
+    len++;
+  }
+  data[len]='\0';
+  return String(data);
 }
