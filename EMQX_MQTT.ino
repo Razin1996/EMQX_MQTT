@@ -53,10 +53,16 @@ boolean resetToDefault = 0;
 boolean end_of_line = 0;
 volatile boolean rotation_count = 0;
 
+const char* ap_ssid = "NodeMCU";
+const char* ap_pass = "123456789";
 AsyncWebServer server(80);
+const char* login_PARAM_INPUT_1 = "User_ID";
+const char* login_PARAM_INPUT_2 = "Password";
 const char* PARAM_INPUT_1 = "input1";
 const char* PARAM_INPUT_2 = "input2";
 const char* PARAM_INPUT_3 = "input3";
+String ap_userID ;
+String ap_userPass ;
 
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
@@ -76,6 +82,21 @@ const char index_html[] PROGMEM = R"rawliteral(
     input3: <input type="text" name="input3">
     <input type="submit" value="Submit">
   </form>
+</body></html>)rawliteral";
+
+const char login_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>ESP Input Login Page</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+  <form action="/get">
+    User ID: <input type="text" name="User_ID">
+    <br>
+    <br>
+    Password: <input type="text" name="Password">
+    <br>
+    <input type="submit" value="Submit">
+  </form><br>
 </body></html>)rawliteral";
 
 void notFound(AsyncWebServerRequest *request) {
@@ -106,6 +127,42 @@ void setup() {
   digitalWrite(motor_negative, LOW);
 
   Serial1.println("Program Started");
+
+  WiFi.softAP(ap_ssid, ap_pass);
+  //server.on("/", apmode_login);
+              // Send web page with input fields to client
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", login_html);
+      });
+
+        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+      String inputMessage;
+    String inputParam;
+    String inputParam1;
+    String inputParam2;
+    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+    if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
+      ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
+      ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
+      inputParam1 = login_PARAM_INPUT_1;
+      inputParam2 = login_PARAM_INPUT_2;
+    }
+    else {
+      inputMessage = "No message sent";
+      inputParam = "none";
+    }
+    Serial1.println(ap_userID);
+    Serial1.println(ap_userPass);
+    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
+                                      +inputParam1+" & " + inputParam2 + ") with value: " + ap_userID + " & " + ap_userPass+
+                                     "<br><a href=\"/\">Return to Home Page</a>");
+  });
+  server.onNotFound(notFound);
+  server.begin();
+  if(ap_userID == "admin" && ap_userPass == "admin"){
+      apmode_value();
+    }
  
   EEPROM.begin(512);
   if(digitalRead(rst) == 0){
@@ -172,7 +229,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
     else if(command == "DISCARD"){
       
       }
-    //client.connect("esp8266-vendy1");
 }
 
 void loop() {
@@ -182,12 +238,6 @@ void loop() {
     client.subscribe(topic2);
   }
  client.loop();
-// if(digitalRead(rst)==0){
-//          // Send web page with input fields to client
-//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-//        request->send_P(200, "text/html", index_html);
-//      });
-//  }
 }
 
 void messageDecoderDispense(String response){
@@ -238,14 +288,7 @@ String commandDecoder(String response){
 void dispense(int quantity){
   if(is_disable == 0 && is_door_lock == 1){
     Serial1.println(quantity);
-    while(quantity > 0){
-//      Serial1.println("Dispensing Continue");
-//
-//        Serial1.println("Dispensing = "+ quantity);
-//        quantity--;
-//        delay(200);
-//        yield();
-       
+    while(quantity > 0){       
       if(digitalRead(rotation_input) == 0 ){
         while(digitalRead(rotation_input) == 0){
           digitalWrite(motor_positive, HIGH);
@@ -411,12 +454,7 @@ void default_ap(){
   //digitalWrite(busy, HIGH);
   digitalWrite(connection, LOW);
   digitalWrite(disconnection, LOW);
-            // Send web page with input fields to client
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
-      });
-      server.onNotFound(notFound);
-  server.begin();
+      
 }
 
 
@@ -440,6 +478,74 @@ void default_ap(){
 //    digitalWrite(disconnection, HIGH);      
 //  }
 //}
+
+//AP Mode
+void apmode_value(){
+        // Send web page with input fields to client
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", index_html);
+      });
+        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    String inputParam;
+    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1)) {
+      inputMessage = request->getParam(PARAM_INPUT_1)->value();
+      inputParam = PARAM_INPUT_1;
+    }
+    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
+    else if (request->hasParam(PARAM_INPUT_2)) {
+      inputMessage = request->getParam(PARAM_INPUT_2)->value();
+      inputParam = PARAM_INPUT_2;
+    }
+    // GET input3 value on <ESP_IP>/get?input3=<inputMessage>
+    else if (request->hasParam(PARAM_INPUT_3)) {
+      inputMessage = request->getParam(PARAM_INPUT_3)->value();
+      inputParam = PARAM_INPUT_3;
+    }
+    else {
+      inputMessage = "No message sent";
+      inputParam = "none";
+    }
+    Serial1.println(inputMessage);
+    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
+                                     + inputParam + ") with value: " + inputMessage +
+                                     "<br><a href=\"/\">Return to Home Page</a>");
+  });
+  server.begin();
+ }
+
+// void apmode_login(){
+//            // Send web page with input fields to client
+//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+//        request->send_P(200, "text/html", login_html);
+//      });
+//
+//        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+//  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+//      String inputMessage;
+//    String inputParam;
+//    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+//    if (request->hasParam(PARAM_INPUT_1)) {
+//      ap_userID = request->getParam(PARAM_INPUT_1)->value();
+//      inputParam = PARAM_INPUT_1;
+//    }
+////    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
+////    else if (request->hasParam(PARAM_INPUT_2)) {
+////      inputMessage = request->getParam(PARAM_INPUT_2)->value();
+////      inputParam = PARAM_INPUT_2;
+////    }
+//    else {
+//      inputMessage = "No message sent";
+//      inputParam = "none";
+//    }
+//    Serial1.println(ap_userID);
+//    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
+//                                     + inputParam + ") with value: " + ap_userID +
+//                                     "<br><a href=\"/\">Return to Home Page</a>");
+//  });
+//  }
 
 //EEPROM
 void writeString(char index,String data)
