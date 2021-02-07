@@ -158,11 +158,11 @@ void setup() {
                                       +inputParam1+" & " + inputParam2 + ") with value: " + ap_userID + " & " + ap_userPass+
                                      "<br><a href=\"/\">Return to Home Page</a>");
   });
-  server.onNotFound(notFound);
-  server.begin();
-  if(ap_userID == "admin" && ap_userPass == "admin"){
+    if(ap_userID == "admin" && ap_userPass == "admin"){
       apmode_value();
     }
+  server.onNotFound(notFound);
+  server.begin();
  
   EEPROM.begin(512);
   if(digitalRead(rst) == 0){
