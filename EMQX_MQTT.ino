@@ -8,13 +8,15 @@
 #include <ArduinoJson.h>
 #include <WiFiClientSecureBearSSL.h>
 #include <ArduinoJson.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
 // WiFi
-const char* WIFI_SSID = "BONYASHOVA-3";
-const char* WIFI_PASSWORD = "9294959699";
+const char* WIFI_SSID = "Onutiative";
+const char* WIFI_PASSWORD = "P@$50fW1f1";
 //const char* WIFI_SSID = "ASUS";
 //const char* WIFI_PASSWORD = "asus2222";
-#define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
+//#define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
 #define connection 15                                             // connect to D1 pin of NodeMCU from green led
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
 #define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
@@ -24,7 +26,7 @@ const char* WIFI_PASSWORD = "9294959699";
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
 #define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
 #define buzzer 1 
-//#define rst 14                                                    // connect to D5 pin of NodeMCU
+#define rst 16                                                    // connect to D0 pin of NodeMCU
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -50,9 +52,35 @@ boolean database_connected = 0;
 boolean resetToDefault = 0;
 boolean end_of_line = 0;
 volatile boolean rotation_count = 0;
-char p[16];
-char s[16];
 
+AsyncWebServer server(80);
+const char* PARAM_INPUT_1 = "input1";
+const char* PARAM_INPUT_2 = "input2";
+const char* PARAM_INPUT_3 = "input3";
+
+// HTML web page to handle 3 input fields (input1, input2, input3)
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>ESP Input Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+  <form action="/get">
+    input1: <input type="text" name="input1">
+    <input type="submit" value="Submit">
+  </form><br>
+  <form action="/get">
+    input2: <input type="text" name="input2">
+    <input type="submit" value="Submit">
+  </form><br>
+  <form action="/get">
+    input3: <input type="text" name="input3">
+    <input type="submit" value="Submit">
+  </form>
+</body></html>)rawliteral";
+
+void notFound(AsyncWebServerRequest *request) {
+  request->send(404, "text/plain", "Not found");
+}
  
 void setup() {
  // Set software serial baud to 115200;
@@ -61,14 +89,14 @@ void setup() {
   int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
-  pinMode(busy, OUTPUT);
+  //pinMode(busy, OUTPUT);
   pinMode(buzzer, OUTPUT);
   pinMode(motor_positive, OUTPUT);
   pinMode(motor_negative, OUTPUT);
   pinMode(rotation_input, INPUT_PULLUP); 
   pinMode(limit, INPUT_PULLUP);
-//  pinMode(rst, INPUT_PULLUP);
-  digitalWrite(busy, HIGH);
+  pinMode(rst, INPUT_PULLUP);
+  //digitalWrite(busy, HIGH);
   digitalWrite(connection, LOW);
   digitalWrite(disconnection,LOW);
   digitalWrite(buzzer, HIGH);
@@ -79,16 +107,20 @@ void setup() {
 
   Serial1.println("Program Started");
  
- EEPROM.begin(512);
-// for (int i = 0; i < 512; i++) {
-//    EEPROM.write(i, '0');
-//  }
+  EEPROM.begin(512);
+  if(digitalRead(rst) == 0){
+      EEPROM.write(100,0);
+      EEPROM.commit();
+      delay(10);
+    }
   Serial1.print("EEPROM: ");
   Serial1.println(EEPROM.read(100));
- if(EEPROM.read(100) == 55)
+ if(EEPROM.read(100) == 55){
     user_ap();
-  else
-    default_ap(); 
+ }
+  else{
+    default_ap();
+  } 
  //connecting to a mqtt broker
  client.setServer(mqtt_broker, mqtt_port);
  client.setCallback(callback);
@@ -96,7 +128,7 @@ void setup() {
 //     String client_id = "esp8266-client-";
 //     client_id += String(WiFi.macAddress());
      Serial1.println("Connecting to public emqx mqtt broker.....");
-     if (client.connect("esp8266-vendy1")) {
+     if (client.connect("esp8266-vendy4")) {
          Serial1.println("Public emqx mqtt broker connected");
      } else {
          Serial1.print("failed with state ");
@@ -145,11 +177,17 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
 void loop() {
  if (!client.connected()) {
-    client.connect("esp8266-vendy1");
+    client.connect("esp8266-vendy4");
     client.subscribe(topic1);
+    client.subscribe(topic2);
   }
  client.loop();
-
+// if(digitalRead(rst)==0){
+//          // Send web page with input fields to client
+//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+//        request->send_P(200, "text/html", index_html);
+//      });
+//  }
 }
 
 void messageDecoderDispense(String response){
@@ -237,7 +275,7 @@ void dispense(int quantity){
         }
         digitalWrite(motor_positive, LOW); 
         digitalWrite(motor_negative, LOW);
-        digitalWrite(busy, HIGH);
+//        digitalWrite(busy, HIGH);
         digitalWrite(connection, HIGH);
         Serial1.println("Dispensing = "+ quantity);
         quantity--;
@@ -295,8 +333,10 @@ void settings_change(String response){
 //     auto p = doc["message"]["password"].as<char*>();
      String u_ssid=String(doc["message"]["ssid"].as<char*>());
      String u_pass=String(doc["message"]["password"].as<char*>());
-    is_disable = doc["message"]["is_disable"].as<int>();
-    is_door_lock = doc["message"]["is_door_lock"].as<int>();
+//    is_disable = doc["message"]["is_disable"].as<int>();
+//    is_door_lock = doc["message"]["is_door_lock"].as<int>();
+    String is_disable = String(doc["message"]["is_disable"].as<char*>());
+    String is_door_lock = String(doc["message"]["is_door_lock"].as<char*>());
     Serial1.println(u_ssid);
     Serial1.println(u_pass);
     writeString(0, u_ssid);
@@ -304,28 +344,11 @@ void settings_change(String response){
     delay(10);
     Serial1.println(is_disable);
     Serial1.println(is_door_lock);
-//    EEPROM.put(0,s);
-//    EEPROM.put(16,p);
+    writeString(33, is_disable);
+    writeString(34,is_door_lock);
     EEPROM.write(100, 55);
     EEPROM.commit();
     delay(10);
-//    if(digitalRead(rst) == 0){
-//    int x = 0;
-//    if(default_status == 1){
-//      user_ap();
-//    }
-//    else{
-//      while(digitalRead(rst) ==0){
-//        delay(100);
-//        x++;
-//        if(x>30){
-//          default_ap();
-//          break;
-//        }
-//        yield();
-//      }
-//    }
-//  }
     user_ap();
   }
 
@@ -334,20 +357,19 @@ void send_status(){
   }
 
 void user_ap(){  
-//    EEPROM.get(0, s);
     String ssid=read_String(0);
     String pass=read_String(16);
     Serial1.print(ssid);
     Serial1.print("\t");
-//    EEPROM.get(16, p);
     Serial1.println(pass);
     delay(10);              
     WiFi.begin(ssid, pass);
     Serial1.print("Connecting to user ");
     Serial1.print(ssid);
     while (WiFi.status() != WL_CONNECTED) {
-      Serial1.print(".");
+    Serial1.print(".");
 //      if(digitalRead(rst) == 0){
+//        default_ap();
 //        break;
 //      }
       yield();
@@ -358,21 +380,22 @@ void user_ap(){
     Serial1.println(ssid);
     Serial1.print("IP Address is : ");
     Serial1.println(WiFi.localIP());
-    default_status = 0;
+              // Send web page with input fields to client
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", index_html);
+      });
 }
 
 void default_ap(){
   delay(10);  
    // connecting to a WiFi network           
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial1.print("Connecting to defult ");
+  Serial1.print("Connecting to default ");
   Serial1.print(WIFI_SSID);
   int wifi_check = 0;
   while(WiFi.status() != WL_CONNECTED) {
     wifi_check++;
     if(wifi_check == 20){
-      default_status = 0;
-      Serial1.println();
       Serial1.println("Connection Failed");
       return;
     }
@@ -385,31 +408,38 @@ void default_ap(){
   Serial1.println(WIFI_SSID);
   Serial1.print("IP Address is : ");
   Serial1.println(WiFi.localIP());
-  default_status = 1;
-  digitalWrite(busy, HIGH);
+  //digitalWrite(busy, HIGH);
   digitalWrite(connection, LOW);
   digitalWrite(disconnection, LOW);
+            // Send web page with input fields to client
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", index_html);
+      });
+      server.onNotFound(notFound);
+  server.begin();
 }
 
-void ledIndicator(){
-  if(database_connected){
-    if(default_status){
-      digitalWrite(busy, HIGH);
-      digitalWrite(connection, LOW);
-      digitalWrite(disconnection, LOW);
-    }
-    else{
-      digitalWrite(busy, LOW);
-      digitalWrite(connection, HIGH);
-      digitalWrite(disconnection, LOW);      
-    }
-  }
-  else{
-    digitalWrite(busy, LOW);
-    digitalWrite(connection, LOW);
-    digitalWrite(disconnection, HIGH);      
-  }
-}
+
+
+//void ledIndicator(){
+//  if(database_connected){
+//    if(default_status){
+//      digitalWrite(busy, HIGH);
+//      digitalWrite(connection, LOW);
+//      digitalWrite(disconnection, LOW);
+//    }
+//    else{
+//      digitalWrite(busy, LOW);
+//      digitalWrite(connection, HIGH);
+//      digitalWrite(disconnection, LOW);      
+//    }
+//  }
+//  else{
+//    digitalWrite(busy, LOW);
+//    digitalWrite(connection, LOW);
+//    digitalWrite(disconnection, HIGH);      
+//  }
+//}
 
 //EEPROM
 void writeString(char index,String data)
