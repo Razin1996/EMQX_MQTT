@@ -12,10 +12,11 @@
 #include <ESPAsyncWebServer.h>
 
 // WiFi
-const char* WIFI_SSID = "Onutiative";
-const char* WIFI_PASSWORD = "P@$50fW1f1";
-//const char* WIFI_SSID = "ASUS";
-//const char* WIFI_PASSWORD = "asus2222";
+//String WIFI_SSID;
+//String WIFI_PASSWORD;
+//const char* WIFI_SSID = "Onutiative";
+//const char* WIFI_PASSWORD = "P@$50fW1f1";
+
 //#define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
 #define connection 15                                             // connect to D1 pin of NodeMCU from green led
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
@@ -30,7 +31,7 @@ const char* WIFI_PASSWORD = "P@$50fW1f1";
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
-const char *topic1 = "machine_id";
+const char *topic;
 const char *topic2 = "pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
@@ -45,8 +46,6 @@ PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
 int B=0,fb=0;
-int is_disable = 0;
-int is_door_lock = 1;
 boolean default_status = 0;
 boolean database_connected = 0;
 boolean resetToDefault = 0;
@@ -55,14 +54,21 @@ volatile boolean rotation_count = 0;
 
 const char* ap_ssid = "NodeMCU";
 const char* ap_pass = "123456789";
+IPAddress local_ip(192,168,1,1);
+IPAddress gateway(192,168,1,1);
+IPAddress subnet(255,255,255,0);
 AsyncWebServer server(80);
 const char* login_PARAM_INPUT_1 = "User_ID";
 const char* login_PARAM_INPUT_2 = "Password";
-const char* PARAM_INPUT_1 = "input1";
-const char* PARAM_INPUT_2 = "input2";
-const char* PARAM_INPUT_3 = "input3";
-String ap_userID ;
-String ap_userPass ;
+const char* value_PARAM_INPUT_1 = "Device_ID";
+const char* value_PARAM_INPUT_2 = "Wifi_SSID";
+const char* value_PARAM_INPUT_3 = "Wifi_Pass";
+String ap_userID;
+String ap_userPass;
+String ap_deviceID;
+String ap_wifi_SSID;
+String ap_wifi_Pass;
+int form_updated = 0;
 
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
@@ -71,22 +77,21 @@ const char index_html[] PROGMEM = R"rawliteral(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   </head><body>
   <form action="/get">
-    input1: <input type="text" name="input1">
+    Device ID: <input type="text" name="Device_ID">
+    <br>
+    <br>
+    Wifi SSID: <input type="text" name="Wifi_SSID">
+    <br>
+    <br>
+    Wifi Password: <input type="text" name="Wifi_Pass">
+    <br>
     <input type="submit" value="Submit">
   </form><br>
-  <form action="/get">
-    input2: <input type="text" name="input2">
-    <input type="submit" value="Submit">
-  </form><br>
-  <form action="/get">
-    input3: <input type="text" name="input3">
-    <input type="submit" value="Submit">
-  </form>
-</body></html>)rawliteral";
+  </body></html>)rawliteral";
 
 const char login_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head>
-  <title>ESP Input Login Page</title>
+  <title>ESP Input Login Form</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   </head><body>
   <form action="/get">
@@ -97,7 +102,7 @@ const char login_html[] PROGMEM = R"rawliteral(
     <br>
     <input type="submit" value="Submit">
   </form><br>
-</body></html>)rawliteral";
+  </body></html>)rawliteral";
 
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
@@ -106,7 +111,11 @@ void notFound(AsyncWebServerRequest *request) {
 void setup() {
  // Set software serial baud to 115200;
   Serial1.begin(115200);
+  EEPROM.begin(512);
 
+  writeString(35, "admin");
+  writeString(45, "admin");
+  
   int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
@@ -129,6 +138,7 @@ void setup() {
   Serial1.println("Program Started");
 
   WiFi.softAP(ap_ssid, ap_pass);
+  WiFi.softAPConfig(local_ip, gateway, subnet);
   //server.on("/", apmode_login);
               // Send web page with input fields to client
       server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -137,34 +147,59 @@ void setup() {
 
         // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
   server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-      String inputMessage;
+    String inputMessage;
     String inputParam;
-    String inputParam1;
-    String inputParam2;
     // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
     if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
       ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
       ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
-      inputParam1 = login_PARAM_INPUT_1;
-      inputParam2 = login_PARAM_INPUT_2;
     }
     else {
-      inputMessage = "No message sent";
-      inputParam = "none";
+//      inputMessage = "No message sent";
+//      inputParam = "none";
+//      Serial1.println("No message sent");
     }
     Serial1.println(ap_userID);
     Serial1.println(ap_userPass);
-   if(ap_userID == "admin" && ap_userPass == "admin"){
+   if(ap_userID == read_String(35) && ap_userPass == read_String(45)){
       request->send(200, "text/html", index_html);
     }else{
-      request->send(200, "text/html", "Username or Password Error!");
+      request->send(200, "text/html", "Username or Password Error!!");
     }
   });
+  // Send web page with input fields to client
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send_P(200, "text/html", index_html);
+      });
+        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    String inputParam;
+    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
+      ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
+      ap_wifi_SSID = request->getParam(value_PARAM_INPUT_1)->value();
+      ap_wifi_Pass = request->getParam(value_PARAM_INPUT_1)->value();
+    }
+    else {
+//      inputMessage = "No message sent";
+//      inputParam = "none";
+      Serial1.println("No message sent");
+    }
+    writeString(55, ap_deviceID);
+    writeString(65, ap_wifi_SSID);
+    writeString(75, ap_wifi_Pass);
+    Serial1.println(ap_deviceID);
+    Serial1.println(ap_wifi_SSID);
+    Serial1.println(ap_wifi_Pass);
+    form_updated = 1;
+    request->send(200, "text/html", "Values have been set successfully.");
+  });
+  
     
   server.onNotFound(notFound);
   server.begin();
  
-  EEPROM.begin(512);
   if(digitalRead(rst) == 0){
       EEPROM.write(100,0);
       EEPROM.commit();
@@ -172,14 +207,16 @@ void setup() {
     }
   Serial1.print("EEPROM: ");
   Serial1.println(EEPROM.read(100));
- if(EEPROM.read(100) == 55){
-    user_ap();
- }
+   if(EEPROM.read(100) == 55){
+      user_ap();
+   }
   else{
     default_ap();
   } 
  //connecting to a mqtt broker
- client.setServer(mqtt_broker, mqtt_port);
+ topic = read_String(55).c_str();
+ while(form_updated == 1){
+  client.setServer(mqtt_broker, mqtt_port);
  client.setCallback(callback);
  while (!client.connected()) {
 //     String client_id = "esp8266-client-";
@@ -194,8 +231,9 @@ void setup() {
      }
  }
  // publish and subscribe
-  client.subscribe(topic1);
+  client.subscribe(topic);
   client.subscribe(topic2);
+}
 
 }
 
@@ -234,7 +272,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 void loop() {
  if (!client.connected()) {
     client.connect("esp8266-vendy4");
-    client.subscribe(topic1);
+    client.subscribe(topic);
     client.subscribe(topic2);
   }
  client.loop();
@@ -261,7 +299,6 @@ String commandDecoder(String response){
   DynamicJsonDocument doc(2048);
   deserializeJson(doc, response);
   auto command = doc["command"].as<char*>();
-  //Serial.println(command);
   return command;
 }
 
@@ -286,8 +323,7 @@ String commandDecoder(String response){
 //}
 
 void dispense(int quantity){
-  if(is_disable == 0 && is_door_lock == 1){
-    Serial1.println(quantity);
+  if(EEPROM.read(33) == 0 && EEPROM.read(34) == 1){
     while(quantity > 0){       
       if(digitalRead(rotation_input) == 0 ){
         while(digitalRead(rotation_input) == 0){
@@ -383,12 +419,12 @@ void settings_change(String response){
     Serial1.println(u_ssid);
     Serial1.println(u_pass);
     writeString(0, u_ssid);
-    writeString(16,u_pass);
+    writeString(16, u_pass);
     delay(10);
     Serial1.println(is_disable);
     Serial1.println(is_door_lock);
     writeString(33, is_disable);
-    writeString(34,is_door_lock);
+    writeString(34, is_door_lock);
     EEPROM.write(100, 55);
     EEPROM.commit();
     delay(10);
@@ -431,6 +467,9 @@ void user_ap(){
 
 void default_ap(){
   delay(10);  
+  String WIFI_SSID = read_String(65);
+  String WIFI_PASSWORD = read_String(75);
+  while(form_updated == 1){
    // connecting to a WiFi network           
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial1.print("Connecting to default ");
@@ -454,7 +493,7 @@ void default_ap(){
   //digitalWrite(busy, HIGH);
   digitalWrite(connection, LOW);
   digitalWrite(disconnection, LOW);
-      
+  }     
 }
 
 
@@ -480,41 +519,37 @@ void default_ap(){
 //}
 
 //AP Mode
-void apmode_value(){
-        // Send web page with input fields to client
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
-      });
-        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
-  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage;
-    String inputParam;
-    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
-    if (request->hasParam(PARAM_INPUT_1)) {
-      inputMessage = request->getParam(PARAM_INPUT_1)->value();
-      inputParam = PARAM_INPUT_1;
-    }
-    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
-    else if (request->hasParam(PARAM_INPUT_2)) {
-      inputMessage = request->getParam(PARAM_INPUT_2)->value();
-      inputParam = PARAM_INPUT_2;
-    }
-    // GET input3 value on <ESP_IP>/get?input3=<inputMessage>
-    else if (request->hasParam(PARAM_INPUT_3)) {
-      inputMessage = request->getParam(PARAM_INPUT_3)->value();
-      inputParam = PARAM_INPUT_3;
-    }
-    else {
-      inputMessage = "No message sent";
-      inputParam = "none";
-    }
-    Serial1.println(inputMessage);
-    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-                                     + inputParam + ") with value: " + inputMessage +
-                                     "<br><a href=\"/\">Return to Home Page</a>");
-  });
-  server.begin();
- }
+//void apmode_value(){
+//        // Send web page with input fields to client
+//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+//        request->send_P(200, "text/html", index_html);
+//      });
+//        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+//  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+//    String inputMessage;
+//    String inputParam;
+//    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+//    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
+//      ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
+//      ap_wifi_SSID = request->getParam(value_PARAM_INPUT_1)->value();
+//      ap_wifi_Pass = request->getParam(value_PARAM_INPUT_1)->value();
+//    }
+//    else {
+////      inputMessage = "No message sent";
+////      inputParam = "none";
+//      Serial1.println("No message sent");
+//    }
+//    writeString(55, ap_deviceID);
+//    writeString(65, ap_wifi_SSID);
+//    writeString(75, ap_wifi_Pass);
+//    Serial1.println(ap_deviceID);
+//    Serial1.println(ap_wifi_SSID);
+//    Serial1.println(ap_wifi_Pass);
+//    request->send(200, "text/html", "Values have been set successfully.");
+//  });
+//  form_updated = 1;
+//  server.begin();
+// }
 
 // void apmode_login(){
 //            // Send web page with input fields to client
