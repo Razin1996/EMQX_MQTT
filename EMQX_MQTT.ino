@@ -154,13 +154,13 @@ void setup() {
     }
     Serial1.println(ap_userID);
     Serial1.println(ap_userPass);
-    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-                                      +inputParam1+" & " + inputParam2 + ") with value: " + ap_userID + " & " + ap_userPass+
-                                     "<br><a href=\"/\">Return to Home Page</a>");
-  });
-    if(ap_userID == "admin" && ap_userPass == "admin"){
-      apmode_value();
+   if(ap_userID == "admin" && ap_userPass == "admin"){
+      request->send(200, "text/html", index_html);
+    }else{
+      request->send(200, "text/html", "Username or Password Error!");
     }
+  });
+    
   server.onNotFound(notFound);
   server.begin();
  
