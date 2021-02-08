@@ -58,6 +58,7 @@ IPAddress local_ip(192,168,1,1);
 IPAddress gateway(192,168,1,1);
 IPAddress subnet(255,255,255,0);
 AsyncWebServer server(80);
+
 const char* login_PARAM_INPUT_1 = "User_ID";
 const char* login_PARAM_INPUT_2 = "Password";
 const char* value_PARAM_INPUT_1 = "Device_ID";
@@ -112,7 +113,11 @@ void setup() {
  // Set software serial baud to 115200;
   Serial1.begin(115200);
   EEPROM.begin(512);
-
+//  for(int i=0;i<=512;i++){
+//    EEPROM.write(i,0);
+//    EEPROM.commit();
+//    delay(10);
+//  }
   writeString(35, "admin");
   writeString(45, "admin");
   
@@ -136,105 +141,96 @@ void setup() {
   digitalWrite(motor_negative, LOW);
 
   Serial1.println("Program Started");
-
-  WiFi.softAP(ap_ssid, ap_pass);
-  WiFi.softAPConfig(local_ip, gateway, subnet);
-  //server.on("/", apmode_login);
-              // Send web page with input fields to client
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", login_html);
-      });
-
-        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
-  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage;
-    String inputParam;
-    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
-    if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
-      ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
-      ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
-    }
-    else {
-//      inputMessage = "No message sent";
-//      inputParam = "none";
-//      Serial1.println("No message sent");
-    }
-    Serial1.println(ap_userID);
-    Serial1.println(ap_userPass);
-   if(ap_userID == read_String(35) && ap_userPass == read_String(45)){
-      request->send(200, "text/html", index_html);
-    }else{
-      request->send(200, "text/html", "Username or Password Error!!");
-    }
-  });
-  // Send web page with input fields to client
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
-      });
-        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
-  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage;
-    String inputParam;
-    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
-    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
-      ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
-      ap_wifi_SSID = request->getParam(value_PARAM_INPUT_1)->value();
-      ap_wifi_Pass = request->getParam(value_PARAM_INPUT_1)->value();
-    }
-    else {
-//      inputMessage = "No message sent";
-//      inputParam = "none";
-      Serial1.println("No message sent");
-    }
-    writeString(55, ap_deviceID);
-    writeString(65, ap_wifi_SSID);
-    writeString(75, ap_wifi_Pass);
-    Serial1.println(ap_deviceID);
-    Serial1.println(ap_wifi_SSID);
-    Serial1.println(ap_wifi_Pass);
-    form_updated = 1;
-    request->send(200, "text/html", "Values have been set successfully.");
-  });
-  
-    
-  server.onNotFound(notFound);
-  server.begin();
- 
   if(digitalRead(rst) == 0){
       EEPROM.write(100,0);
       EEPROM.commit();
       delay(10);
     }
+
+    Serial1.println("AP start");
+    WiFi.softAP(ap_ssid, ap_pass);
+    WiFi.softAPConfig(local_ip, gateway, subnet);
+  //server.on("/", apmode_login);
+              // Send web page with input fields to client
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", login_html);});
+
+  // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    //GET login form data point
+    if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
+      ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
+      ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
+    }
+    Serial1.println(ap_userID);
+    Serial1.println(ap_userPass);
+   if(ap_userID == read_String(35) && ap_userPass == read_String(45)){
+      request->send_P(200, "text/html", index_html);
+    }else{
+      request->send_P(200, "text/html", "Username or Password Error!!");
+    }
+    
+    //2nd page
+    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
+      ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
+      ap_wifi_SSID = request->getParam(value_PARAM_INPUT_2)->value();
+      ap_wifi_Pass = request->getParam(value_PARAM_INPUT_3)->value();
+    }
+    form_updated = 1;
+    request->send(200, "text/html", "Values have been set successfully.");
+    Serial1.println(ap_deviceID);
+    Serial1.println(ap_wifi_SSID);
+    Serial1.println(ap_wifi_Pass);
+    if(ap_deviceID!=""){
+      writeString(55, ap_deviceID);
+    }
+    if(ap_wifi_SSID!="" && ap_wifi_Pass!=""){
+      writeString(65, ap_wifi_SSID);
+      writeString(75, ap_wifi_Pass);
+      EEPROM.write(100,55);
+      EEPROM.commit();
+      delay(10);
+      user_ap();
+      configMQTT();
+    }
+  });
+  server.onNotFound(notFound);
+  server.begin();
+ 
   Serial1.print("EEPROM: ");
   Serial1.println(EEPROM.read(100));
    if(EEPROM.read(100) == 55){
       user_ap();
-   }
-  else{
-    default_ap();
-  } 
- //connecting to a mqtt broker
- topic = read_String(55).c_str();
- while(form_updated == 1){
-  client.setServer(mqtt_broker, mqtt_port);
- client.setCallback(callback);
- while (!client.connected()) {
-//     String client_id = "esp8266-client-";
-//     client_id += String(WiFi.macAddress());
-     Serial1.println("Connecting to public emqx mqtt broker.....");
-     if (client.connect("esp8266-vendy4")) {
-         Serial1.println("Public emqx mqtt broker connected");
-     } else {
-         Serial1.print("failed with state ");
-         Serial1.print(client.state());
-         delay(2000);
-     }
- }
- // publish and subscribe
-  client.subscribe(topic);
-  client.subscribe(topic2);
+      configMQTT();
+  }else{
+    Serial1.println("Reset mode");
+  }
+
 }
 
+void configMQTT(){
+  //connecting to a mqtt broker
+  Serial1.println(read_String(55));
+  topic = read_String(55).c_str();
+  while(form_updated == 1){
+  client.setServer(mqtt_broker, mqtt_port);
+  client.setCallback(callback);
+  while (!client.connected()) {
+    Serial1.println("Connecting to public emqx mqtt broker.....");
+    if (client.connect("esp8266-vendy4")) {
+      Serial1.println("Public emqx mqtt broker connected");
+     } else {
+       Serial1.print("failed with state ");
+       Serial1.print(client.state());
+       delay(2000);
+     }
+  }
+  // publish and subscribe
+  Serial1.print("Topic: ");
+  Serial1.println(topic);
+  client.subscribe(topic);
+  client.subscribe(topic2);
+ }
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -270,12 +266,14 @@ void callback(char *topic, byte *payload, unsigned int length) {
 }
 
 void loop() {
- if (!client.connected()) {
-    client.connect("esp8266-vendy4");
-    client.subscribe(topic);
-    client.subscribe(topic2);
-  }
- client.loop();
+   if(EEPROM.read(100) == 55){
+    if (!client.connected()) {
+      client.connect("esp8266-vendy4");
+      client.subscribe(topic);
+      client.subscribe(topic2);
+    }
+    client.loop();
+   }
 }
 
 void messageDecoderDispense(String response){
@@ -464,37 +462,37 @@ void user_ap(){
         request->send_P(200, "text/html", index_html);
       });
 }
-
-void default_ap(){
-  delay(10);  
-  String WIFI_SSID = read_String(65);
-  String WIFI_PASSWORD = read_String(75);
-  while(form_updated == 1){
-   // connecting to a WiFi network           
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial1.print("Connecting to default ");
-  Serial1.print(WIFI_SSID);
-  int wifi_check = 0;
-  while(WiFi.status() != WL_CONNECTED) {
-    wifi_check++;
-    if(wifi_check == 20){
-      Serial1.println("Connection Failed");
-      return;
-    }
-    yield();
-    Serial1.print(".");
-    delay(1000);
-  }
-  Serial1.println();
-  Serial1.print("Connected to ");
-  Serial1.println(WIFI_SSID);
-  Serial1.print("IP Address is : ");
-  Serial1.println(WiFi.localIP());
-  //digitalWrite(busy, HIGH);
-  digitalWrite(connection, LOW);
-  digitalWrite(disconnection, LOW);
-  }     
-}
+//
+//void default_ap(){
+//  delay(10);  
+//  String WIFI_SSID = read_String(65);
+//  String WIFI_PASSWORD = read_String(75);
+//  while(form_updated == 1){
+//   // connecting to a WiFi network           
+//  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+//  Serial1.print("Connecting to default ");
+//  Serial1.print(WIFI_SSID);
+//  int wifi_check = 0;
+//  while(WiFi.status() != WL_CONNECTED) {
+//    wifi_check++;
+//    if(wifi_check == 20){
+//      Serial1.println("Connection Failed");
+//      return;
+//    }
+//    yield();
+//    Serial1.print(".");
+//    delay(1000);
+//  }
+//  Serial1.println();
+//  Serial1.print("Connected to ");
+//  Serial1.println(WIFI_SSID);
+//  Serial1.print("IP Address is : ");
+//  Serial1.println(WiFi.localIP());
+//  //digitalWrite(busy, HIGH);
+//  digitalWrite(connection, LOW);
+//  digitalWrite(disconnection, LOW);
+//  }     
+//}
 
 
 
