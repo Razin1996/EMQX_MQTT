@@ -36,7 +36,6 @@
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
-const char *topic2 = "pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
 const int mqtt_port = 1883;
@@ -49,7 +48,6 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 
-int B=0,fb=0;
 boolean default_status = 0;
 boolean database_connected = 0;
 boolean resetToDefault = 0;
@@ -213,13 +211,15 @@ void setup() {
 void configMQTT(){
   //connecting to a mqtt broker
   String romTopic=read_String(55);
+  String romClient=read_String(55);
   Serial1.println(romTopic);
   const char *topic = romTopic.c_str();
+  const char *clientID = romClient.c_str();
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
     Serial1.println("Connecting to public emqx mqtt broker.....");
-    if (client.connect("esp8266-vendy4")) {
+    if (client.connect(clientID)) {
       Serial1.println("Public emqx mqtt broker connected");
      } else {
        Serial1.print("failed with state ");
@@ -461,25 +461,25 @@ void user_ap(){
     delay(1000);
 }
 
-void ledIndicator(){
-  if(database_connected){
-    if(default_status){
-      digitalWrite(busy, HIGH);
-      digitalWrite(connection, LOW);
-      digitalWrite(disconnection, LOW);
-    }
-    else{
-      digitalWrite(busy, LOW);
-      digitalWrite(connection, HIGH);
-      digitalWrite(disconnection, LOW);      
-    }
-  }
-  else{
-    digitalWrite(busy, LOW);
-    digitalWrite(connection, LOW);
-    digitalWrite(disconnection, HIGH);      
-  }
-}
+//void ledIndicator(){
+//  if(database_connected){
+//    if(default_status){
+//      digitalWrite(busy, HIGH);
+//      digitalWrite(connection, LOW);
+//      digitalWrite(disconnection, LOW);
+//    }
+//    else{
+//      digitalWrite(busy, LOW);
+//      digitalWrite(connection, HIGH);
+//      digitalWrite(disconnection, LOW);      
+//    }
+//  }
+//  else{
+//    digitalWrite(busy, LOW);
+//    digitalWrite(connection, LOW);
+//    digitalWrite(disconnection, HIGH);      
+//  }
+//}
 
 //EEPROM
 void writeString(char index,String data)
