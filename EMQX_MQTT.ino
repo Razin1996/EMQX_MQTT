@@ -10,6 +10,11 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+//importent comments
+/*
+ * machineID=topic
+ * 
+ */
 
 // WiFi
 //String WIFI_SSID;
@@ -17,7 +22,7 @@
 //const char* WIFI_SSID = "Onutiative";
 //const char* WIFI_PASSWORD = "P@$50fW1f1";
 
-//#define busy 16                                                   // connect to D0 pin of NodeMCU from green blue
+//#define busy 16                                                 // connect to D0 pin of NodeMCU from green blue
 #define connection 15                                             // connect to D1 pin of NodeMCU from green led
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
 #define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
@@ -31,7 +36,6 @@
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
-const char *topic;
 const char *topic2 = "pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
@@ -69,7 +73,6 @@ String ap_userPass;
 String ap_deviceID;
 String ap_wifi_SSID;
 String ap_wifi_Pass;
-int form_updated = 0;
 
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
@@ -147,51 +150,50 @@ void setup() {
       delay(10);
     }
 
-    Serial1.println("AP start");
-    WiFi.softAP(ap_ssid, ap_pass);
-    WiFi.softAPConfig(local_ip, gateway, subnet);
+  Serial1.println("AP start");
+  WiFi.softAP(ap_ssid, ap_pass);
+  WiFi.softAPConfig(local_ip, gateway, subnet);
   //server.on("/", apmode_login);
-              // Send web page with input fields to client
+  // Send web page with input fields to client
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", login_html);});
+  request->send_P(200, "text/html", login_html);});
 
   // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
   server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    //GET login form data point
-    if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
-      ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
-      ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
-    }
-    Serial1.println(ap_userID);
-    Serial1.println(ap_userPass);
+  //GET login form data point
+  if (request->hasParam(login_PARAM_INPUT_1)&& request->hasParam(login_PARAM_INPUT_2)) {
+    ap_userID = request->getParam(login_PARAM_INPUT_1)->value();
+    ap_userPass = request->getParam(login_PARAM_INPUT_2)->value();
+  }
+  Serial1.println(ap_userID);
+  Serial1.println(ap_userPass);
    if(ap_userID == read_String(35) && ap_userPass == read_String(45)){
       request->send_P(200, "text/html", index_html);
     }else{
       request->send_P(200, "text/html", "Username or Password Error!!");
     }
     
-    //2nd page
-    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
+ //2nd page
+   if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
       ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
       ap_wifi_SSID = request->getParam(value_PARAM_INPUT_2)->value();
       ap_wifi_Pass = request->getParam(value_PARAM_INPUT_3)->value();
     }
-    form_updated = 1;
-    request->send(200, "text/html", "Values have been set successfully.");
-    Serial1.println(ap_deviceID);
-    Serial1.println(ap_wifi_SSID);
-    Serial1.println(ap_wifi_Pass);
-    if(ap_deviceID!=""){
+   request->send(200, "text/html", "Values have been set successfully.");
+   Serial1.println(ap_deviceID);
+   Serial1.println(ap_wifi_SSID);
+   Serial1.println(ap_wifi_Pass);
+   if(ap_deviceID!=""){
       writeString(55, ap_deviceID);
     }
-    if(ap_wifi_SSID!="" && ap_wifi_Pass!=""){
-      writeString(65, ap_wifi_SSID);
-      writeString(75, ap_wifi_Pass);
-      EEPROM.write(100,55);
-      EEPROM.commit();
-      delay(10);
-      user_ap();
-      configMQTT();
+   if(ap_wifi_SSID!="" && ap_wifi_Pass!=""){
+     writeString(0, ap_wifi_SSID);
+     writeString(16, ap_wifi_Pass);
+     EEPROM.write(100,55);
+     EEPROM.commit();
+     delay(10);
+     user_ap();
+     configMQTT();
     }
   });
   server.onNotFound(notFound);
@@ -199,20 +201,20 @@ void setup() {
  
   Serial1.print("EEPROM: ");
   Serial1.println(EEPROM.read(100));
-   if(EEPROM.read(100) == 55){
-      user_ap();
-      configMQTT();
+  if(EEPROM.read(100) == 55){
+     user_ap();
+     configMQTT();
   }else{
-    Serial1.println("Reset mode");
-  }
+   Serial1.println("Reset mode");
+ }
 
 }
 
 void configMQTT(){
   //connecting to a mqtt broker
-  Serial1.println(read_String(55));
-  topic = read_String(55).c_str();
-  while(form_updated == 1){
+  String romTopic=read_String(55);
+  Serial1.println(romTopic);
+  const char *topic = romTopic.c_str();
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
@@ -226,11 +228,9 @@ void configMQTT(){
      }
   }
   // publish and subscribe
-  Serial1.print("Topic: ");
+  Serial1.print("Topic in config: ");
   Serial1.println(topic);
   client.subscribe(topic);
-  client.subscribe(topic2);
- }
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -267,13 +267,20 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
 void loop() {
    if(EEPROM.read(100) == 55){
-    if (!client.connected()) {
+    if(WiFi.status() == WL_CONNECTED){
+      if (!client.connected()) {
       client.connect("esp8266-vendy4");
+      String romTopic=read_String(55);
+       Serial1.print("Topic in Loop: ");
+      Serial1.println(romTopic);
+      const char *topic = romTopic.c_str();
       client.subscribe(topic);
-      client.subscribe(topic2);
+      }
+      client.loop();
+    }else{
+      user_ap();
     }
-    client.loop();
-   }
+  }
 }
 
 void messageDecoderDispense(String response){
@@ -290,7 +297,6 @@ void messageDecoderDispense(String response){
     Serial1.println(dis_quantity);
     dispense(dis_quantity);
   }
-  
 }
 
 String commandDecoder(String response){
@@ -318,6 +324,20 @@ String commandDecoder(String response){
 //    rfid_card_status = 0;
 //    ledIndicator();
 //  }
+//}
+
+//void postRFID(String rfid){
+//  String romTopic=read_String(55);
+//  JsonObject& object = jsonBuffer.createObject();
+//  object["RfIdCardNo"] = rfid;
+////  object["machinceId"] = romTopic;
+////  object["clientId"] = "snp01018";
+//  String myURL = "http://vendy.store/api/0v1/nodeMcu";
+//  char jsonChar[100];
+//  object.printTo(jsonChar);
+//  sendRepo(myURL,jsonChar);
+//  delay(10);
+//  jsonBuffer.clear();
 //}
 
 void dispense(int quantity){
@@ -356,17 +376,6 @@ void dispense(int quantity){
         digitalWrite(connection, HIGH);
         Serial1.println("Dispensing = "+ quantity);
         quantity--;
-  //      do{
-  //        Serial1.println(A);
-  //        JsonObject& object = jsonBuffer.createObject();
-  //        object["A"] = A;
-  //        JsonObject& feedback = putFirebaseData("product.json", object);
-  //        fb = feedback.get<int>("A");
-  //        jsonBuffer.clear();
-  //        yield();
-  //        ledIndicator();
-  //        digitalWrite(busy, HIGH);
-  //      }while(A != fb);
       }
       if(end_of_line){
         if(digitalRead(limit) == 0){
@@ -406,12 +415,8 @@ void dispense(int quantity){
 void settings_change(String response){
     DynamicJsonDocument doc(2048);
     deserializeJson(doc, response);
-//     auto s = doc["message"]["ssid"].as<char*>();
-//     auto p = doc["message"]["password"].as<char*>();
-     String u_ssid=String(doc["message"]["ssid"].as<char*>());
-     String u_pass=String(doc["message"]["password"].as<char*>());
-//    is_disable = doc["message"]["is_disable"].as<int>();
-//    is_door_lock = doc["message"]["is_door_lock"].as<int>();
+    String u_ssid=String(doc["message"]["ssid"].as<char*>());
+    String u_pass=String(doc["message"]["password"].as<char*>());
     String is_disable = String(doc["message"]["is_disable"].as<char*>());
     String is_door_lock = String(doc["message"]["is_door_lock"].as<char*>());
     Serial1.println(u_ssid);
@@ -444,11 +449,7 @@ void user_ap(){
     Serial1.print("Connecting to user ");
     Serial1.print(ssid);
     while (WiFi.status() != WL_CONNECTED) {
-    Serial1.print(".");
-//      if(digitalRead(rst) == 0){
-//        default_ap();
-//        break;
-//      }
+      Serial1.print(".");
       yield();
       delay(1000);
     }
@@ -457,128 +458,28 @@ void user_ap(){
     Serial1.println(ssid);
     Serial1.print("IP Address is : ");
     Serial1.println(WiFi.localIP());
-              // Send web page with input fields to client
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send_P(200, "text/html", index_html);
-      });
+    delay(1000);
 }
-//
-//void default_ap(){
-//  delay(10);  
-//  String WIFI_SSID = read_String(65);
-//  String WIFI_PASSWORD = read_String(75);
-//  while(form_updated == 1){
-//   // connecting to a WiFi network           
-//  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-//  Serial1.print("Connecting to default ");
-//  Serial1.print(WIFI_SSID);
-//  int wifi_check = 0;
-//  while(WiFi.status() != WL_CONNECTED) {
-//    wifi_check++;
-//    if(wifi_check == 20){
-//      Serial1.println("Connection Failed");
-//      return;
-//    }
-//    yield();
-//    Serial1.print(".");
-//    delay(1000);
-//  }
-//  Serial1.println();
-//  Serial1.print("Connected to ");
-//  Serial1.println(WIFI_SSID);
-//  Serial1.print("IP Address is : ");
-//  Serial1.println(WiFi.localIP());
-//  //digitalWrite(busy, HIGH);
-//  digitalWrite(connection, LOW);
-//  digitalWrite(disconnection, LOW);
-//  }     
-//}
 
-
-
-//void ledIndicator(){
-//  if(database_connected){
-//    if(default_status){
-//      digitalWrite(busy, HIGH);
-//      digitalWrite(connection, LOW);
-//      digitalWrite(disconnection, LOW);
-//    }
-//    else{
-//      digitalWrite(busy, LOW);
-//      digitalWrite(connection, HIGH);
-//      digitalWrite(disconnection, LOW);      
-//    }
-//  }
-//  else{
-//    digitalWrite(busy, LOW);
-//    digitalWrite(connection, LOW);
-//    digitalWrite(disconnection, HIGH);      
-//  }
-//}
-
-//AP Mode
-//void apmode_value(){
-//        // Send web page with input fields to client
-//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-//        request->send_P(200, "text/html", index_html);
-//      });
-//        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
-//  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-//    String inputMessage;
-//    String inputParam;
-//    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
-//    if (request->hasParam(value_PARAM_INPUT_1)&&request->hasParam(value_PARAM_INPUT_2)&&request->hasParam(value_PARAM_INPUT_3)) {
-//      ap_deviceID = request->getParam(value_PARAM_INPUT_1)->value();
-//      ap_wifi_SSID = request->getParam(value_PARAM_INPUT_1)->value();
-//      ap_wifi_Pass = request->getParam(value_PARAM_INPUT_1)->value();
-//    }
-//    else {
-////      inputMessage = "No message sent";
-////      inputParam = "none";
-//      Serial1.println("No message sent");
-//    }
-//    writeString(55, ap_deviceID);
-//    writeString(65, ap_wifi_SSID);
-//    writeString(75, ap_wifi_Pass);
-//    Serial1.println(ap_deviceID);
-//    Serial1.println(ap_wifi_SSID);
-//    Serial1.println(ap_wifi_Pass);
-//    request->send(200, "text/html", "Values have been set successfully.");
-//  });
-//  form_updated = 1;
-//  server.begin();
-// }
-
-// void apmode_login(){
-//            // Send web page with input fields to client
-//      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-//        request->send_P(200, "text/html", login_html);
-//      });
-//
-//        // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
-//  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
-//      String inputMessage;
-//    String inputParam;
-//    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
-//    if (request->hasParam(PARAM_INPUT_1)) {
-//      ap_userID = request->getParam(PARAM_INPUT_1)->value();
-//      inputParam = PARAM_INPUT_1;
-//    }
-////    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
-////    else if (request->hasParam(PARAM_INPUT_2)) {
-////      inputMessage = request->getParam(PARAM_INPUT_2)->value();
-////      inputParam = PARAM_INPUT_2;
-////    }
-//    else {
-//      inputMessage = "No message sent";
-//      inputParam = "none";
-//    }
-//    Serial1.println(ap_userID);
-//    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
-//                                     + inputParam + ") with value: " + ap_userID +
-//                                     "<br><a href=\"/\">Return to Home Page</a>");
-//  });
-//  }
+void ledIndicator(){
+  if(database_connected){
+    if(default_status){
+      digitalWrite(busy, HIGH);
+      digitalWrite(connection, LOW);
+      digitalWrite(disconnection, LOW);
+    }
+    else{
+      digitalWrite(busy, LOW);
+      digitalWrite(connection, HIGH);
+      digitalWrite(disconnection, LOW);      
+    }
+  }
+  else{
+    digitalWrite(busy, LOW);
+    digitalWrite(connection, LOW);
+    digitalWrite(disconnection, HIGH);      
+  }
+}
 
 //EEPROM
 void writeString(char index,String data)
