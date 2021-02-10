@@ -10,6 +10,8 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <ESP8266HTTPClient.h>
+#include <rdm6300.h>
 //importent comments
 /*
  * machineID=topic
@@ -47,6 +49,7 @@ const int mqtt_port = 1883;
 WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
+Rdm6300 rdm6300;
 
 boolean default_status = 0;
 boolean database_connected = 0;
@@ -54,6 +57,7 @@ boolean resetToDefault = 0;
 boolean end_of_line = 0;
 volatile boolean rotation_count = 0;
 
+//AP Mode Settings
 const char* ap_ssid = "NodeMCU";
 const char* ap_pass = "123456789";
 IPAddress local_ip(192,168,1,1);
@@ -113,6 +117,7 @@ void notFound(AsyncWebServerRequest *request) {
 void setup() {
  // Set software serial baud to 115200;
   Serial1.begin(115200);
+ 
   EEPROM.begin(512);
 //  for(int i=0;i<=512;i++){
 //    EEPROM.write(i,0);
@@ -205,6 +210,8 @@ void setup() {
   }else{
    Serial1.println("Reset mode");
  }
+  rdm6300.begin(RDM6300_RX_PIN);
+  Serial1.println("RFID Started");
 
 }
 
@@ -267,6 +274,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
 void loop() {
    if(EEPROM.read(100) == 55){
+    readRFID();
     if(WiFi.status() == WL_CONNECTED){
       if (!client.connected()) {
       client.connect("esp8266-vendy4");
@@ -277,6 +285,7 @@ void loop() {
       client.subscribe(topic);
       }
       client.loop();
+      readRFID();
     }else{
       user_ap();
     }
@@ -306,39 +315,41 @@ String commandDecoder(String response){
   return command;
 }
 
-//void readRFID(){
-//  delay(10);
-//  if (rdm6300.update()){
-//    digitalWrite(busy, HIGH);
-//    digitalWrite(connection, LOW);
-//    digitalWrite(disconnection, HIGH);
-//    digitalWrite(buzzer,HIGH);
-//    delay(100);
-//    digitalWrite(buzzer,LOW);
-//    String rfId= String(rdm6300.get_tag_id(),HEX);
-//    Serial1.println(rfId);
-//    A++;
-//    rdm6300.end();
-//    delay(100);
-//    rdm6300.begin(RDM6300_RX_PIN);
-//    rfid_card_status = 0;
-//    ledIndicator();
-//  }
-//}
+void readRFID(){
+  delay(10);
+  if (rdm6300.update()){
+    //digitalWrite(busy, HIGH);
+    digitalWrite(connection, LOW);
+    digitalWrite(disconnection, HIGH);
+    digitalWrite(buzzer,HIGH);
+    delay(100);
+    digitalWrite(buzzer,LOW);
+    String rfId= String(rdm6300.get_tag_id(),HEX);
+    Serial1.println(rfId);
+    //A++;
+    rdm6300.end();
+    delay(100);
+    rdm6300.begin(RDM6300_RX_PIN);
+    postRFID(rfId);
+    //rfid_card_status = 0;
+    //ledIndicator();
+  }
+}
 
-//void postRFID(String rfid){
-//  String romTopic=read_String(55);
-//  JsonObject& object = jsonBuffer.createObject();
-//  object["RfIdCardNo"] = rfid;
-////  object["machinceId"] = romTopic;
-////  object["clientId"] = "snp01018";
-//  String myURL = "http://vendy.store/api/0v1/nodeMcu";
-//  char jsonChar[100];
-//  object.printTo(jsonChar);
-//  sendRepo(myURL,jsonChar);
-//  delay(10);
-//  jsonBuffer.clear();
-//}
+void postRFID(String rfid){
+  DynamicJsonDocument doc(2048);
+  String romTopic=read_String(55);
+  JsonObject object = doc.to<JsonObject>();
+  object["RfIdCardNo"] = rfid;
+  object["machinceId"] = romTopic;
+  object["clientId"] = "snp01018";
+  String myURL = "http://vendy.store/api/0v1/nodeMcu";
+  char jsonChar[100];
+  serializeJson(doc, jsonChar);
+  postData(myURL,jsonChar);
+  delay(10);
+  doc.clear();
+}
 
 void dispense(int quantity){
   if(EEPROM.read(33) == 0 && EEPROM.read(34) == 1){
@@ -510,4 +521,34 @@ String read_String(char index)
   }
   data[len]='\0';
   return String(data);
+}
+
+void postData(String url, String object){
+  if(WiFi.status()== WL_CONNECTED){
+    Serial1.print("URL: ");
+    Serial1.println(url);
+    Serial1.print("Request Body: ");
+    Serial1.println(object);
+    HTTPClient http;                                    //Declare object of class HTTPClient
+    http.begin(url);
+    http.setTimeout(3000);
+    int httpCode = 0, count = 0;
+    do{
+      http.addHeader("Authorization", "Basic dmVuZHlVc2VyOlYjbmR5VVNlUg==");
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("Cache-Control", "no-cache");
+      httpCode = http.POST(object);                       //Send the request
+      Serial1.println(httpCode);                          //Print HTTP return code
+      http.end();                                         //Close connection
+      if(httpCode==200){
+        digitalWrite(buzzer,HIGH);
+        Serial1.println(httpCode);
+        delay(100);
+      }
+      count++;
+      digitalWrite(buzzer,LOW);
+      delay(100);
+    }while(httpCode < 0 && count < 2);
+  }
+  return;
 }
