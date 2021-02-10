@@ -273,8 +273,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
 }
 
 void loop() {
+   readRFID();
    if(EEPROM.read(100) == 55){
-    readRFID();
     if(WiFi.status() == WL_CONNECTED){
       if (!client.connected()) {
       client.connect("esp8266-vendy4");
@@ -283,13 +283,16 @@ void loop() {
       Serial1.println(romTopic);
       const char *topic = romTopic.c_str();
       client.subscribe(topic);
+      readRFID();
       }
       client.loop();
       readRFID();
     }else{
       user_ap();
+      readRFID();
     }
   }
+  yield;
 }
 
 void messageDecoderDispense(String response){
