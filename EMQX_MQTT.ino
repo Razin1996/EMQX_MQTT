@@ -12,6 +12,8 @@
 #include <ESPAsyncWebServer.h>
 #include <ESP8266HTTPClient.h>
 #include <rdm6300.h>
+#include <SoftwareSerial.h>
+#include <DFMiniMp3.h>
 //importent comments
 /*
  * machineID=topic
@@ -76,6 +78,7 @@ String ap_deviceID;
 String ap_wifi_SSID;
 String ap_wifi_Pass;
 
+
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head>
@@ -113,11 +116,60 @@ const char login_html[] PROGMEM = R"rawliteral(
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
- 
+
+//Mp3 Operation
+// implement a notification class,
+// its member methods will get called 
+//
+class Mp3Notify
+{
+public:
+  static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action)
+  {
+    if (source & DfMp3_PlaySources_Sd) 
+    {
+        Serial1.print("SD Card, ");
+    }
+    if (source & DfMp3_PlaySources_Usb) 
+    {
+        Serial1.print("USB Disk, ");
+    }
+    if (source & DfMp3_PlaySources_Flash) 
+    {
+        Serial1.print("Flash, ");
+    }
+    Serial1.println(action);
+  }
+  static void OnError(uint16_t errorCode)
+  {
+    // see DfMp3_Error for code meaning
+    Serial1.println();
+    Serial1.print("Com Error ");
+    Serial1.println(errorCode);
+  }
+  static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track)
+  {
+    Serial1.print("Play finished for #");
+    Serial1.println(track);  
+  }
+  static void OnPlaySourceOnline(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "online");
+  }
+  static void OnPlaySourceInserted(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "inserted");
+  }
+  static void OnPlaySourceRemoved(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "removed");
+  }
+};
+
+
 void setup() {
- // Set software serial baud to 115200;
+ // Set software Serial1 baud to 115200;
   Serial1.begin(115200);
- 
   EEPROM.begin(512);
 //  for(int i=0;i<=512;i++){
 //    EEPROM.write(i,0);
@@ -127,7 +179,7 @@ void setup() {
   writeString(35, "admin");
   writeString(45, "admin");
   
-  int count = 0;
+  //int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
   //pinMode(busy, OUTPUT);
@@ -272,7 +324,56 @@ void callback(char *topic, byte *payload, unsigned int length) {
       }
 }
 
+// Some arduino boards only have one hardware serial port, so a software serial port is needed instead.
+// comment out the above definition and uncomment these lines
+// instance a DFMiniMp3 object, 
+// defined with the above notification class and the hardware serial class
+//
+
+SoftwareSerial secondarySerial(12, 15); // RX, TX
+DFMiniMp3<SoftwareSerial, Mp3Notify> mp3(secondarySerial);
+
+//DFMiniMp3<HardwareSerial, Mp3Notify> mp3(Serial);
+void waitMilliseconds(uint16_t msWait)
+{
+  uint32_t start = millis();
+  
+  while ((millis() - start) < msWait)
+  {
+    // calling mp3.loop() periodically allows for notifications 
+    // to be handled without interrupts
+    mp3.loop(); 
+    delay(1);
+  }
+}
+void configMp3(){
+  //Mp3 operation
+  mp3.begin();
+  uint16_t volume = mp3.getVolume();
+  Serial1.print("Volume ");
+  Serial1.println(volume);
+  mp3.setVolume(24);
+  uint16_t count = mp3.getTotalTrackCount(DfMp3_PlaySource_Sd);
+  Serial1.print("files ");
+  Serial1.println(count);
+  Serial1.println("starting...");
+}
+void payAudio(int audioIndex){
+  configMp3();
+  if(Serial){
+    mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
+    waitMilliseconds(10000);
+    mp3.end();
+  }else{
+    mp3.begin(9600); 
+    mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
+    waitMilliseconds(10000);
+    mp3.end();
+  }
+}
+
 void loop() {
+//   payAudio(1);
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
@@ -325,17 +426,14 @@ void readRFID(){
     digitalWrite(connection, LOW);
     digitalWrite(disconnection, HIGH);
     digitalWrite(buzzer,HIGH);
-    delay(100);
+    delay(250);
     digitalWrite(buzzer,LOW);
     String rfId= String(rdm6300.get_tag_id(),HEX);
     Serial1.println(rfId);
-    //A++;
     rdm6300.end();
     delay(100);
+    payAudio(1);
     rdm6300.begin(RDM6300_RX_PIN);
-    postRFID(rfId);
-    //rfid_card_status = 0;
-    //ledIndicator();
   }
 }
 
