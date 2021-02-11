@@ -31,12 +31,15 @@
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
 #define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
 #define TX1 2                                                     // NOT connected to D4 pin of NodeMCU
-#define motor_negative 14                                         // connect to D5 pin of NodeMCU
+                                         
 #define rotation_input 12                                         // connect to D6 pin of NodeMCU
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
 #define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
 #define buzzer 1 
 #define rst 16                                                    // connect to D0 pin of NodeMCU
+#define red 14         // connect to D5 pin of NodeMCU
+#define green 9
+#define blue 10
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -182,21 +185,12 @@ void setup() {
   //int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
+  pinMode(red,OUTPUT);
+//  pinMode(green,OUTPUT);
+//  pinMode(blue,OUTPUT);
   //pinMode(busy, OUTPUT);
-  pinMode(buzzer, OUTPUT);
-  pinMode(motor_positive, OUTPUT);
-  pinMode(motor_negative, OUTPUT);
-  pinMode(rotation_input, INPUT_PULLUP); 
-  pinMode(limit, INPUT_PULLUP);
+
   pinMode(rst, INPUT_PULLUP);
-  //digitalWrite(busy, HIGH);
-  digitalWrite(connection, LOW);
-  digitalWrite(disconnection,LOW);
-  digitalWrite(buzzer, HIGH);
-  delay(100);
-  digitalWrite(buzzer, LOW);
-  digitalWrite(motor_positive, LOW);
-  digitalWrite(motor_negative, LOW);
 
   Serial1.println("Program Started");
   if(digitalRead(rst) == 0){
@@ -264,7 +258,7 @@ void setup() {
  }
   rdm6300.begin(RDM6300_RX_PIN);
   Serial1.println("RFID Started");
-
+  configMp3();
 }
 
 void configMQTT(){
@@ -290,6 +284,7 @@ void configMQTT(){
   Serial1.print("Topic in config: ");
   Serial1.println(topic);
   client.subscribe(topic);
+  digitalWrite(red,HIGH);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -391,7 +386,10 @@ void loop() {
     }else{
       user_ap();
       readRFID();
+      digitalWrite(red,LOW);
     }
+  }else{
+    digitalWrite(red,LOW);
   }
   yield;
 }
@@ -453,75 +451,9 @@ void postRFID(String rfid){
 }
 
 void dispense(int quantity){
-  if(EEPROM.read(33) == 0 && EEPROM.read(34) == 1){
-    while(quantity > 0){       
-      if(digitalRead(rotation_input) == 0 ){
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;        
-          yield();
-        }
-      }
-      if(digitalRead(rotation_input)){
-        while(digitalRead(rotation_input)){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield();
-        }
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield(); 
-        }
-        digitalWrite(motor_positive, LOW); 
-        digitalWrite(motor_negative, LOW);
-//        digitalWrite(busy, HIGH);
-        digitalWrite(connection, HIGH);
-        Serial1.println("Dispensing = "+ quantity);
-        quantity--;
-      }
-      if(end_of_line){
-        if(digitalRead(limit) == 0){
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, HIGH);
-          delay(10000);
-        }
-        if(digitalRead(limit)){
-          while(digitalRead(limit)){
-            digitalWrite(motor_positive, LOW);
-            digitalWrite(motor_negative, HIGH);
-            delay(200);
-            yield();
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-          delay(500);
-          while(!digitalRead(limit)){
-            digitalWrite(motor_positive, HIGH);
-            digitalWrite(motor_negative, LOW);
-            delay(200);
-            yield();            
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-        }
-        end_of_line = 0;
-      }
-      yield();
-    }
-  }
-  digitalWrite(connection, LOW);
-  digitalWrite(motor_positive, LOW);
-  digitalWrite(motor_negative, LOW);
+ Serial.begin(9600);
+ Serial.print(quantity);
+ Serial.end();
 }
 
 void settings_change(String response){
