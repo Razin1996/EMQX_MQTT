@@ -452,7 +452,11 @@ void postRFID(String rfid){
 
 void dispense(int quantity){
  Serial.begin(9600);
- Serial.print(quantity);
+ delay(10);
+ Serial.print(String(quantity));
+ Serial1.print("Command quantity: ");
+ Serial1.println(quantity);
+ payAudio(2);
  Serial.end();
 }
 
