@@ -451,13 +451,13 @@ void postRFID(String rfid){
 }
 
 void dispense(int quantity){
- Serial.begin(9600);
- delay(10);
- Serial.print(String(quantity));
- Serial1.print("Command quantity: ");
- Serial1.println(quantity);
- payAudio(2);
- Serial.end();
+// Serial.begin(9600);
+// delay(10);
+// Serial.print(String(quantity));
+// Serial1.print("Command quantity: ");
+// Serial1.println(quantity);
+// payAudio(2);
+// Serial.end();
 }
 
 void settings_change(String response){
