@@ -10,6 +10,10 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <ESP8266HTTPClient.h>
+#include <rdm6300.h>
+#include <SoftwareSerial.h>
+#include <DFMiniMp3.h>
 //importent comments
 /*
  * machineID=topic
@@ -27,16 +31,18 @@
 #define motor_positive 4                                          // connect to D2 pin of NodeMCU
 #define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
 #define TX1 2                                                     // NOT connected to D4 pin of NodeMCU
-#define motor_negative 14                                         // connect to D5 pin of NodeMCU
+                                         
 #define rotation_input 12                                         // connect to D6 pin of NodeMCU
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
 #define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
 #define buzzer 1 
 #define rst 16                                                    // connect to D0 pin of NodeMCU
+#define red 14         // connect to D5 pin of NodeMCU
+#define green 9
+#define blue 10
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
-const char *topic2 = "pubsub";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
 const int mqtt_port = 1883;
@@ -48,14 +54,15 @@ const int mqtt_port = 1883;
 WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
+Rdm6300 rdm6300;
 
-int B=0,fb=0;
 boolean default_status = 0;
 boolean database_connected = 0;
 boolean resetToDefault = 0;
 boolean end_of_line = 0;
 volatile boolean rotation_count = 0;
 
+//AP Mode Settings
 const char* ap_ssid = "NodeMCU";
 const char* ap_pass = "123456789";
 IPAddress local_ip(192,168,1,1);
@@ -73,6 +80,7 @@ String ap_userPass;
 String ap_deviceID;
 String ap_wifi_SSID;
 String ap_wifi_Pass;
+
 
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
@@ -111,9 +119,59 @@ const char login_html[] PROGMEM = R"rawliteral(
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
- 
+
+//Mp3 Operation
+// implement a notification class,
+// its member methods will get called 
+//
+class Mp3Notify
+{
+public:
+  static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action)
+  {
+    if (source & DfMp3_PlaySources_Sd) 
+    {
+        Serial1.print("SD Card, ");
+    }
+    if (source & DfMp3_PlaySources_Usb) 
+    {
+        Serial1.print("USB Disk, ");
+    }
+    if (source & DfMp3_PlaySources_Flash) 
+    {
+        Serial1.print("Flash, ");
+    }
+    Serial1.println(action);
+  }
+  static void OnError(uint16_t errorCode)
+  {
+    // see DfMp3_Error for code meaning
+    Serial1.println();
+    Serial1.print("Com Error ");
+    Serial1.println(errorCode);
+  }
+  static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track)
+  {
+    Serial1.print("Play finished for #");
+    Serial1.println(track);  
+  }
+  static void OnPlaySourceOnline(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "online");
+  }
+  static void OnPlaySourceInserted(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "inserted");
+  }
+  static void OnPlaySourceRemoved(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "removed");
+  }
+};
+
+
 void setup() {
- // Set software serial baud to 115200;
+ // Set software Serial1 baud to 115200;
   Serial1.begin(115200);
   EEPROM.begin(512);
 //  for(int i=0;i<=512;i++){
@@ -124,24 +182,15 @@ void setup() {
   writeString(35, "admin");
   writeString(45, "admin");
   
-  int count = 0;
+  //int count = 0;
   pinMode(connection, OUTPUT);
   pinMode(disconnection, OUTPUT);
+  pinMode(red,OUTPUT);
+//  pinMode(green,OUTPUT);
+//  pinMode(blue,OUTPUT);
   //pinMode(busy, OUTPUT);
-  pinMode(buzzer, OUTPUT);
-  pinMode(motor_positive, OUTPUT);
-  pinMode(motor_negative, OUTPUT);
-  pinMode(rotation_input, INPUT_PULLUP); 
-  pinMode(limit, INPUT_PULLUP);
+
   pinMode(rst, INPUT_PULLUP);
-  //digitalWrite(busy, HIGH);
-  digitalWrite(connection, LOW);
-  digitalWrite(disconnection,LOW);
-  digitalWrite(buzzer, HIGH);
-  delay(100);
-  digitalWrite(buzzer, LOW);
-  digitalWrite(motor_positive, LOW);
-  digitalWrite(motor_negative, LOW);
 
   Serial1.println("Program Started");
   if(digitalRead(rst) == 0){
@@ -207,19 +256,23 @@ void setup() {
   }else{
    Serial1.println("Reset mode");
  }
-
+  rdm6300.begin(RDM6300_RX_PIN);
+  Serial1.println("RFID Started");
+  configMp3();
 }
 
 void configMQTT(){
   //connecting to a mqtt broker
   String romTopic=read_String(55);
+  String romClient=read_String(55);
   Serial1.println(romTopic);
   const char *topic = romTopic.c_str();
+  const char *clientID = romClient.c_str();
   client.setServer(mqtt_broker, mqtt_port);
   client.setCallback(callback);
   while (!client.connected()) {
     Serial1.println("Connecting to public emqx mqtt broker.....");
-    if (client.connect("esp8266-vendy4")) {
+    if (client.connect(clientID)) {
       Serial1.println("Public emqx mqtt broker connected");
      } else {
        Serial1.print("failed with state ");
@@ -231,6 +284,7 @@ void configMQTT(){
   Serial1.print("Topic in config: ");
   Serial1.println(topic);
   client.subscribe(topic);
+  digitalWrite(red,HIGH);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -265,7 +319,57 @@ void callback(char *topic, byte *payload, unsigned int length) {
       }
 }
 
+// Some arduino boards only have one hardware serial port, so a software serial port is needed instead.
+// comment out the above definition and uncomment these lines
+// instance a DFMiniMp3 object, 
+// defined with the above notification class and the hardware serial class
+//
+
+SoftwareSerial secondarySerial(12, 15); // RX, TX
+DFMiniMp3<SoftwareSerial, Mp3Notify> mp3(secondarySerial);
+
+//DFMiniMp3<HardwareSerial, Mp3Notify> mp3(Serial);
+void waitMilliseconds(uint16_t msWait)
+{
+  uint32_t start = millis();
+  
+  while ((millis() - start) < msWait)
+  {
+    // calling mp3.loop() periodically allows for notifications 
+    // to be handled without interrupts
+    mp3.loop(); 
+    delay(1);
+  }
+}
+void configMp3(){
+  //Mp3 operation
+  mp3.begin();
+  uint16_t volume = mp3.getVolume();
+  Serial1.print("Volume ");
+  Serial1.println(volume);
+  mp3.setVolume(24);
+  uint16_t count = mp3.getTotalTrackCount(DfMp3_PlaySource_Sd);
+  Serial1.print("files ");
+  Serial1.println(count);
+  Serial1.println("starting...");
+}
+void payAudio(int audioIndex){
+  configMp3();
+  if(Serial){
+    mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
+    waitMilliseconds(10000);
+    mp3.end();
+  }else{
+    mp3.begin(9600); 
+    mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
+    waitMilliseconds(10000);
+    mp3.end();
+  }
+}
+
 void loop() {
+//   payAudio(1);
+   readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
       if (!client.connected()) {
@@ -275,12 +379,19 @@ void loop() {
       Serial1.println(romTopic);
       const char *topic = romTopic.c_str();
       client.subscribe(topic);
+      readRFID();
       }
       client.loop();
+      readRFID();
     }else{
       user_ap();
+      readRFID();
+      digitalWrite(red,LOW);
     }
+  }else{
+    digitalWrite(red,LOW);
   }
+  yield;
 }
 
 void messageDecoderDispense(String response){
@@ -306,110 +417,47 @@ String commandDecoder(String response){
   return command;
 }
 
-//void readRFID(){
-//  delay(10);
-//  if (rdm6300.update()){
-//    digitalWrite(busy, HIGH);
-//    digitalWrite(connection, LOW);
-//    digitalWrite(disconnection, HIGH);
-//    digitalWrite(buzzer,HIGH);
-//    delay(100);
-//    digitalWrite(buzzer,LOW);
-//    String rfId= String(rdm6300.get_tag_id(),HEX);
-//    Serial1.println(rfId);
-//    A++;
-//    rdm6300.end();
-//    delay(100);
-//    rdm6300.begin(RDM6300_RX_PIN);
-//    rfid_card_status = 0;
-//    ledIndicator();
-//  }
-//}
+void readRFID(){
+  delay(10);
+  if (rdm6300.update()){
+    //digitalWrite(busy, HIGH);
+    digitalWrite(connection, LOW);
+    digitalWrite(disconnection, HIGH);
+    digitalWrite(buzzer,HIGH);
+    delay(250);
+    digitalWrite(buzzer,LOW);
+    String rfId= String(rdm6300.get_tag_id(),HEX);
+    Serial1.println(rfId);
+    rdm6300.end();
+    delay(100);
+    payAudio(1);
+    rdm6300.begin(RDM6300_RX_PIN);
+  }
+}
 
-//void postRFID(String rfid){
-//  String romTopic=read_String(55);
-//  JsonObject& object = jsonBuffer.createObject();
-//  object["RfIdCardNo"] = rfid;
-////  object["machinceId"] = romTopic;
-////  object["clientId"] = "snp01018";
-//  String myURL = "http://vendy.store/api/0v1/nodeMcu";
-//  char jsonChar[100];
-//  object.printTo(jsonChar);
-//  sendRepo(myURL,jsonChar);
-//  delay(10);
-//  jsonBuffer.clear();
-//}
+void postRFID(String rfid){
+  DynamicJsonDocument doc(2048);
+  String romTopic=read_String(55);
+  JsonObject object = doc.to<JsonObject>();
+  object["RfIdCardNo"] = rfid;
+  object["machinceId"] = romTopic;
+  object["clientId"] = "snp01018";
+  String myURL = "http://vendy.store/api/0v1/nodeMcu";
+  char jsonChar[100];
+  serializeJson(doc, jsonChar);
+  postData(myURL,jsonChar);
+  delay(10);
+  doc.clear();
+}
 
 void dispense(int quantity){
-  if(EEPROM.read(33) == 0 && EEPROM.read(34) == 1){
-    while(quantity > 0){       
-      if(digitalRead(rotation_input) == 0 ){
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;        
-          yield();
-        }
-      }
-      if(digitalRead(rotation_input)){
-        while(digitalRead(rotation_input)){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield();
-        }
-        while(digitalRead(rotation_input) == 0){
-          digitalWrite(motor_positive, HIGH);
-          digitalWrite(motor_negative, LOW);
-          delay(200);
-          if(!digitalRead(limit))
-            end_of_line = 1;
-          yield(); 
-        }
-        digitalWrite(motor_positive, LOW); 
-        digitalWrite(motor_negative, LOW);
-//        digitalWrite(busy, HIGH);
-        digitalWrite(connection, HIGH);
-        Serial1.println("Dispensing = "+ quantity);
-        quantity--;
-      }
-      if(end_of_line){
-        if(digitalRead(limit) == 0){
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, HIGH);
-          delay(10000);
-        }
-        if(digitalRead(limit)){
-          while(digitalRead(limit)){
-            digitalWrite(motor_positive, LOW);
-            digitalWrite(motor_negative, HIGH);
-            delay(200);
-            yield();
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-          delay(500);
-          while(!digitalRead(limit)){
-            digitalWrite(motor_positive, HIGH);
-            digitalWrite(motor_negative, LOW);
-            delay(200);
-            yield();            
-          }
-          digitalWrite(motor_positive, LOW);
-          digitalWrite(motor_negative, LOW);
-        }
-        end_of_line = 0;
-      }
-      yield();
-    }
-  }
-  digitalWrite(connection, LOW);
-  digitalWrite(motor_positive, LOW);
-  digitalWrite(motor_negative, LOW);
+// Serial.begin(9600);
+// delay(10);
+// Serial.print(String(quantity));
+// Serial1.print("Command quantity: ");
+// Serial1.println(quantity);
+// payAudio(2);
+// Serial.end();
 }
 
 void settings_change(String response){
@@ -461,25 +509,25 @@ void user_ap(){
     delay(1000);
 }
 
-void ledIndicator(){
-  if(database_connected){
-    if(default_status){
-      digitalWrite(busy, HIGH);
-      digitalWrite(connection, LOW);
-      digitalWrite(disconnection, LOW);
-    }
-    else{
-      digitalWrite(busy, LOW);
-      digitalWrite(connection, HIGH);
-      digitalWrite(disconnection, LOW);      
-    }
-  }
-  else{
-    digitalWrite(busy, LOW);
-    digitalWrite(connection, LOW);
-    digitalWrite(disconnection, HIGH);      
-  }
-}
+//void ledIndicator(){
+//  if(database_connected){
+//    if(default_status){
+//      digitalWrite(busy, HIGH);
+//      digitalWrite(connection, LOW);
+//      digitalWrite(disconnection, LOW);
+//    }
+//    else{
+//      digitalWrite(busy, LOW);
+//      digitalWrite(connection, HIGH);
+//      digitalWrite(disconnection, LOW);      
+//    }
+//  }
+//  else{
+//    digitalWrite(busy, LOW);
+//    digitalWrite(connection, LOW);
+//    digitalWrite(disconnection, HIGH);      
+//  }
+//}
 
 //EEPROM
 void writeString(char index,String data)
@@ -510,4 +558,34 @@ String read_String(char index)
   }
   data[len]='\0';
   return String(data);
+}
+
+void postData(String url, String object){
+  if(WiFi.status()== WL_CONNECTED){
+    Serial1.print("URL: ");
+    Serial1.println(url);
+    Serial1.print("Request Body: ");
+    Serial1.println(object);
+    HTTPClient http;                                    //Declare object of class HTTPClient
+    http.begin(url);
+    http.setTimeout(3000);
+    int httpCode = 0, count = 0;
+    do{
+      http.addHeader("Authorization", "Basic dmVuZHlVc2VyOlYjbmR5VVNlUg==");
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("Cache-Control", "no-cache");
+      httpCode = http.POST(object);                       //Send the request
+      Serial1.println(httpCode);                          //Print HTTP return code
+      http.end();                                         //Close connection
+      if(httpCode==200){
+        digitalWrite(buzzer,HIGH);
+        Serial1.println(httpCode);
+        delay(100);
+      }
+      count++;
+      digitalWrite(buzzer,LOW);
+      delay(100);
+    }while(httpCode < 0 && count < 2);
+  }
+  return;
 }
