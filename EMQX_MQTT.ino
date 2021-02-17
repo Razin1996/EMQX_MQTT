@@ -31,20 +31,8 @@
 //const char* WIFI_SSID = "Onutiative";
 //const char* WIFI_PASSWORD = "P@$50fW1f1";
 
-//#define busy 16                                                 // connect to D0 pin of NodeMCU from green blue
-#define connection 15                                             // connect to D1 pin of NodeMCU from green led
-#define motor_positive 4                                          // connect to D2 pin of NodeMCU
-#define disconnection 0                                           // connect to D3 pin of NodeMCU from red led
-#define TX1 2                                                     // NOT connected to D4 pin of NodeMCU
-                                         
-#define rotation_input 12                                         // connect to D6 pin of NodeMCU
+// RFID
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
-#define limit 5                                                   // NOT connected to D8 of NodeMCU (reserved for ouput only)
-#define buzzer 1 
-#define rst 16                                                    // connect to D0 pin of NodeMCU
-#define red 14         // connect to D5 pin of NodeMCU
-#define green 9
-#define blue 10
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -52,22 +40,12 @@ const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
 const int mqtt_port = 1883;
 
-//for future customer userID
-//mqtt_customer_usename = "";
-//mqtt_customer_password = "";
-
 WiFiClient espClient;
 PubSubClient client(espClient);
 ESP8266WiFiMulti WifiMulti;
 Rdm6300 rdm6300;
 
-boolean default_status = 0;
-boolean database_connected = 0;
-boolean resetToDefault = 0;
-boolean end_of_line = 0;
-volatile boolean rotation_count = 0;
-
-//AP Mode Settings
+//AP Mode and Server Settings
 const char* ap_ssid = "NodeMCU";
 const char* ap_pass = "123456789";
 IPAddress local_ip(192,168,1,1);
@@ -174,8 +152,42 @@ public:
   }
 };
 
-//OLED
+//OLED Display
 Adafruit_SSD1306 display = Adafruit_SSD1306(128, 64, &Wire);
+#define LOGO_HEIGHT   30
+#define LOGO_WIDTH    30
+
+//Vendy Logo
+static const unsigned char PROGMEM logo_bmp[] =
+{
+0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 
+  0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0x8f, 0xfc, 0xff, 0xff, 0x07, 0xfc, 0xff, 0xfc, 0x03, 0xfc, 
+  0x80, 0x18, 0x01, 0xfc, 0x87, 0xf0, 0x01, 0xfc, 0x87, 0xe0, 0x00, 0xfc, 0x87, 0xf8, 0x00, 0xfc, 
+  0x87, 0xfe, 0x00, 0xfc, 0x87, 0x80, 0x00, 0x3c, 0x87, 0x00, 0x00, 0x3c, 0x87, 0x00, 0x00, 0xfc, 
+  0x87, 0x00, 0x01, 0x8c, 0x87, 0x80, 0x07, 0x8c, 0x87, 0xc3, 0xef, 0x8c, 0x87, 0xff, 0xff, 0x8c, 
+  0x87, 0xff, 0xff, 0x8c, 0x87, 0xff, 0xff, 0x8c, 0x87, 0xff, 0xff, 0x8c, 0x80, 0x00, 0x00, 0x0c, 
+  0xc0, 0x00, 0x00, 0x1c, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc, 
+  0xff, 0xff, 0xff, 0xfc, 0xff, 0xff, 0xff, 0xfc,
+};
+
+//////////////////////////////////////////////////////////////
+
+//Signal Output
+int door=3;
+int red = 4;
+int green = 5;
+int blue = 6;
+int buzzer = 7;
+
+// Signal input
+int res = 0;
+int in1 = 1;
+int in2 = 2;
+
+int latchPin = 12;
+int clockPin = 16;
+int dataPin = 14;
+byte regByte=0;
 
 void setup() {
  // Set software Serial1 baud to 115200;
@@ -188,19 +200,9 @@ void setup() {
 //  }
   writeString(35, "admin");
   writeString(45, "admin");
-  
-  //int count = 0;
-  pinMode(connection, OUTPUT);
-  pinMode(disconnection, OUTPUT);
-  pinMode(red,OUTPUT);
-//  pinMode(green,OUTPUT);
-//  pinMode(blue,OUTPUT);
-  //pinMode(busy, OUTPUT);
-
-  pinMode(rst, INPUT_PULLUP);
 
   Serial1.println("Program Started");
-  if(digitalRead(rst) == 0){
+  if(!1){
       EEPROM.write(100,0);
       EEPROM.commit();
       delay(10);
@@ -269,6 +271,23 @@ void setup() {
 //  display.display();
   Serial1.println("RFID Started");
   configMp3();
+  
+  //OLED Setup
+  Serial1.println("OLED FeatherWing test");
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
+  Serial1.println("OLED begun");
+  display.display();
+  delay(1000);
+  display.clearDisplay();
+  display.display();
+  Serial1.println("IO test");
+  
+  testdrawbitmap();
+
+  // Shift Register
+  pinMode(latchPin, OUTPUT);
+  pinMode(dataPin, OUTPUT);  
+  pinMode(clockPin, OUTPUT);
 }
 
 void configMQTT(){
@@ -294,7 +313,7 @@ void configMQTT(){
   Serial1.print("Topic in config: ");
   Serial1.println(topic);
   client.subscribe(topic);
-  digitalWrite(red,HIGH);
+//  digitalWrite(red,HIGH);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -329,12 +348,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
       }
 }
 
-// Some arduino boards only have one hardware serial port, so a software serial port is needed instead.
-// comment out the above definition and uncomment these lines
-// instance a DFMiniMp3 object, 
-// defined with the above notification class and the hardware serial class
-//
-
+// DFPlayer 
 SoftwareSerial secondarySerial(12, 15); // RX, TX
 DFMiniMp3<SoftwareSerial, Mp3Notify> mp3(secondarySerial);
 
@@ -396,12 +410,23 @@ void loop() {
     }else{
       user_ap();
       readRFID();
-      digitalWrite(red,LOW);
+//      digitalWrite(red,LOW);
     }
   }else{
-    digitalWrite(red,LOW);
+//    digitalWrite(red,LOW);
   }
   yield;
+}
+
+void testdrawbitmap(void) {
+  display.clearDisplay();
+
+  display.drawBitmap(
+    (display.width()  - LOGO_WIDTH ) / 2,
+    (display.height() - LOGO_HEIGHT) / 2,
+    logo_bmp, LOGO_WIDTH, LOGO_HEIGHT, 1);
+  display.display();
+  delay(1000);
 }
 
 void messageDecoderDispense(String response){
@@ -430,27 +455,25 @@ String commandDecoder(String response){
 void readRFID(){
   delay(10);
   if (rdm6300.update()){
-    //digitalWrite(busy, HIGH);
-    digitalWrite(connection, LOW);
-    digitalWrite(disconnection, HIGH);
-    digitalWrite(buzzer,HIGH);
-    delay(250);
-    digitalWrite(buzzer,LOW);
     String rfId= String(rdm6300.get_tag_id(),HEX);
     Serial1.println(rfId);
     rdm6300.end();
     delay(100);
     playAudio(1);
-//    display.setTextSize(1);
-//    display.setTextColor(SSD1306_WHITE);
-//    display.setCursor(0,28);
-//    display.println("Hello world!");
-//    display.display();
-//    delay(2000);
-//    display.clearDisplay();
-//    display.end();
+    setOutRegister(red);
     rdm6300.begin(RDM6300_RX_PIN);
   }
+}
+
+void setOutRegister(int index)
+{
+   delay(50);
+   digitalWrite(latchPin, LOW);
+   shiftOut(dataPin, clockPin, LSBFIRST, regByte);
+   digitalWrite(latchPin, HIGH);
+   delay(50);
+   bitSet(regByte, index);
+   delay(50);
 }
 
 void postRFID(String rfid){
@@ -596,12 +619,12 @@ void postData(String url, String object){
       Serial1.println(httpCode);                          //Print HTTP return code
       http.end();                                         //Close connection
       if(httpCode==200){
-        digitalWrite(buzzer,HIGH);
+//        digitalWrite(buzzer,HIGH);
         Serial1.println(httpCode);
         delay(100);
       }
       count++;
-      digitalWrite(buzzer,LOW);
+//      digitalWrite(buzzer,LOW);
       delay(100);
     }while(httpCode < 0 && count < 2);
   }
