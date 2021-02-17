@@ -33,6 +33,8 @@
 
 // RFID
 #define RDM6300_RX_PIN 13                                         // connect to D7 pin of NodeMCU force hardware uart
+//RESET
+#define rst A0
 
 // MQTT Broker
 const char *mqtt_broker = "103.98.206.92";
@@ -173,21 +175,21 @@ static const unsigned char PROGMEM logo_bmp[] =
 //////////////////////////////////////////////////////////////
 
 //Signal Output
-int door=3;
-int red = 4;
-int green = 5;
-int blue = 6;
-int buzzer = 7;
+byte doorRed=25;
+byte red = 9;
+byte green = 5;
+byte blue = 3;
+byte buz = 0b00000000;
+byte buzGreen=0b00000100;
 
 // Signal input
-int res = 0;
-int in1 = 1;
-int in2 = 2;
+//int res = 0;
+//int in1 = 1;
+//int in2 = 2;
 
-int latchPin = 12;
+int latchPin = 14;
 int clockPin = 16;
-int dataPin = 14;
-byte regByte=0;
+int dataPin = 0;
 
 void setup() {
  // Set software Serial1 baud to 115200;
@@ -288,6 +290,7 @@ void setup() {
   pinMode(latchPin, OUTPUT);
   pinMode(dataPin, OUTPUT);  
   pinMode(clockPin, OUTPUT);
+  updateShiftRegister(0);
 }
 
 void configMQTT(){
@@ -392,6 +395,19 @@ void playAudio(int audioIndex){
 }
 
 void loop() {
+  Serial1.print("Analog: ");
+  int adcValue=analogRead(A0);
+  Serial1.println(adcValue);
+  if(adcValue > 100){
+    Serial1.println("Reset active");
+    updateShiftRegister(15);
+    delay(10);
+  }else{
+    Serial1.println("Reset inactive");
+    updateShiftRegister(9);
+    delay(10);
+  }
+  
 //   playAudio(1);
    readRFID();
    if(EEPROM.read(100) == 55){
@@ -416,6 +432,13 @@ void loop() {
 //    digitalWrite(red,LOW);
   }
   yield;
+}
+
+void updateShiftRegister(byte leds)
+{
+   digitalWrite(latchPin, LOW);
+   shiftOut(dataPin, clockPin, LSBFIRST, leds);
+   digitalWrite(latchPin, HIGH);
 }
 
 void testdrawbitmap(void) {
@@ -459,21 +482,12 @@ void readRFID(){
     Serial1.println(rfId);
     rdm6300.end();
     delay(100);
+    updateShiftRegister(buzGreen);
+//    bitSet(buzGreen, 3);
     playAudio(1);
-    setOutRegister(red);
     rdm6300.begin(RDM6300_RX_PIN);
+    updateShiftRegister(0);
   }
-}
-
-void setOutRegister(int index)
-{
-   delay(50);
-   digitalWrite(latchPin, LOW);
-   shiftOut(dataPin, clockPin, LSBFIRST, regByte);
-   digitalWrite(latchPin, HIGH);
-   delay(50);
-   bitSet(regByte, index);
-   delay(50);
 }
 
 void postRFID(String rfid){
