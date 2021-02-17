@@ -14,7 +14,12 @@
 #include <rdm6300.h>
 #include <SoftwareSerial.h>
 #include <DFMiniMp3.h>
-//importent comments
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+//important comments
 /*
  * machineID=topic
  * 
@@ -169,6 +174,8 @@ public:
   }
 };
 
+//OLED
+Adafruit_SSD1306 display = Adafruit_SSD1306(128, 64, &Wire);
 
 void setup() {
  // Set software Serial1 baud to 115200;
@@ -257,6 +264,9 @@ void setup() {
    Serial1.println("Reset mode");
  }
   rdm6300.begin(RDM6300_RX_PIN);
+//  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+//  display.clearDisplay();
+//  display.display();
   Serial1.println("RFID Started");
   configMp3();
 }
@@ -353,7 +363,7 @@ void configMp3(){
   Serial1.println(count);
   Serial1.println("starting...");
 }
-void payAudio(int audioIndex){
+void playAudio(int audioIndex){
   configMp3();
   if(Serial){
     mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
@@ -368,14 +378,14 @@ void payAudio(int audioIndex){
 }
 
 void loop() {
-//   payAudio(1);
+//   playAudio(1);
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
       if (!client.connected()) {
       client.connect("esp8266-vendy4");
       String romTopic=read_String(55);
-       Serial1.print("Topic in Loop: ");
+      Serial1.print("Topic in Loop: ");
       Serial1.println(romTopic);
       const char *topic = romTopic.c_str();
       client.subscribe(topic);
@@ -430,7 +440,15 @@ void readRFID(){
     Serial1.println(rfId);
     rdm6300.end();
     delay(100);
-    payAudio(1);
+    playAudio(1);
+//    display.setTextSize(1);
+//    display.setTextColor(SSD1306_WHITE);
+//    display.setCursor(0,28);
+//    display.println("Hello world!");
+//    display.display();
+//    delay(2000);
+//    display.clearDisplay();
+//    display.end();
     rdm6300.begin(RDM6300_RX_PIN);
   }
 }
@@ -456,7 +474,7 @@ void dispense(int quantity){
 // Serial.print(String(quantity));
 // Serial1.print("Command quantity: ");
 // Serial1.println(quantity);
-// payAudio(2);
+// playAudio(2);
 // Serial.end();
 }
 
