@@ -212,9 +212,13 @@ void setup() {
   Serial1.println("Program Started");
   int adcValue=analogRead(rst);
   if(adcValue > 150){
-    updateShiftRegister(red);
+    updateShiftRegister(blue);
     EEPROM.write(100,0);
     EEPROM.commit();
+    delay(10);
+  }else{
+    Serial1.println("Reset active");
+    updateShiftRegister(green);
     delay(10);
   }
 
@@ -403,18 +407,18 @@ void playAudio(int audioIndex){
 }
 
 void loop() {
-  Serial1.print("Analog: ");
-  int adcValue=analogRead(rst);
-  Serial1.println(adcValue);
-  if(adcValue > 150){
-    Serial1.println("Reset active");
-    updateShiftRegister(red);
-    delay(10);
-  }else{
-    Serial1.println("Reset inactive");
-    updateShiftRegister(green);
-    delay(10);
-  }
+//  Serial1.print("Analog: ");
+//  int adcValue=analogRead(rst);
+//  Serial1.println(adcValue);
+//  if(adcValue > 150){
+//    Serial1.println("Reset active");
+//    updateShiftRegister(red);
+//    delay(10);
+//  }else{
+//    Serial1.println("Reset inactive");
+//    updateShiftRegister(green);
+//    delay(10);
+//  }
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
