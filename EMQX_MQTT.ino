@@ -22,6 +22,11 @@
 //important comments
 /*
  * machineID=topic
+ * writeString(35)=ap_userID
+ * writeString(45)=ap_userPass
+ * writeString(55)=ap_deviceID
+ * writeString(0)=ap_wifi_SSID
+ * writeString(16)=ap_wifi_Pass
  * 
  */
 
@@ -37,7 +42,7 @@
 #define rst A0
 
 // MQTT Broker
-const char *mqtt_broker = "103.98.206.92";
+const char *mqtt_broker = "mqtt.natai.cloud";
 const char *mqtt_username = "emqx";
 const char *mqtt_password = "public";
 const int mqtt_port = 1883;
@@ -175,12 +180,13 @@ static const unsigned char PROGMEM logo_bmp[] =
 //////////////////////////////////////////////////////////////
 
 //Signal Output
-byte doorRed=25;
+byte doorRed = 25;
 byte red = 9;
 byte green = 5;
 byte blue = 3;
-byte buz = 0b00000000;
-byte buzGreen=0b00000100;
+byte buz = 0;
+byte buzGreen = 4;
+byte default_val = 1;
 
 // Signal input
 //int res = 0;
@@ -204,11 +210,13 @@ void setup() {
   writeString(45, "admin");
 
   Serial1.println("Program Started");
-  if(!1){
-      EEPROM.write(100,0);
-      EEPROM.commit();
-      delay(10);
-    }
+  int adcValue=analogRead(rst);
+  if(adcValue > 150){
+    updateShiftRegister(red);
+    EEPROM.write(100,0);
+    EEPROM.commit();
+    delay(10);
+  }
 
   Serial1.println("AP start");
   WiFi.softAP(ap_ssid, ap_pass);
@@ -395,20 +403,18 @@ void playAudio(int audioIndex){
 }
 
 void loop() {
-  Serial1.print("Analog: ");
-  int adcValue=analogRead(A0);
-  Serial1.println(adcValue);
-  if(adcValue > 100){
-    Serial1.println("Reset active");
-    updateShiftRegister(15);
-    delay(10);
-  }else{
-    Serial1.println("Reset inactive");
-    updateShiftRegister(9);
-    delay(10);
-  }
-  
-//   playAudio(1);
+//  Serial1.print("Analog: ");
+//  int adcValue=analogRead(rst);
+//  Serial1.println(adcValue);
+//  if(adcValue > 150){
+//    Serial1.println("Reset active");
+//    updateShiftRegister(red);
+//    delay(10);
+//  }else{
+//    Serial1.println("Reset inactive");
+//    updateShiftRegister(doorRed);
+//    delay(10);
+//  }
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
@@ -423,13 +429,14 @@ void loop() {
       }
       client.loop();
       readRFID();
+      updateShiftRegister(green);
     }else{
       user_ap();
       readRFID();
 //      digitalWrite(red,LOW);
     }
   }else{
-//    digitalWrite(red,LOW);
+      updateShiftRegister(red);
   }
   yield;
 }
@@ -483,10 +490,9 @@ void readRFID(){
     rdm6300.end();
     delay(100);
     updateShiftRegister(buzGreen);
-//    bitSet(buzGreen, 3);
     playAudio(1);
     rdm6300.begin(RDM6300_RX_PIN);
-    updateShiftRegister(0);
+    updateShiftRegister(default_val);
   }
 }
 
@@ -497,7 +503,7 @@ void postRFID(String rfid){
   object["RfIdCardNo"] = rfid;
   object["machinceId"] = romTopic;
   object["clientId"] = "snp01018";
-  String myURL = "http://vendy.store/api/0v1/nodeMcu";
+  String myURL = "http://api.vendy.store/2v0/OrderByRFID";
   char jsonChar[100];
   serializeJson(doc, jsonChar);
   postData(myURL,jsonChar);
@@ -538,7 +544,24 @@ void settings_change(String response){
   }
 
 void send_status(){
-  
+  DynamicJsonDocument doc(2048);
+  String romTopic=read_String(55);
+  JsonObject object = doc.to<JsonObject>();
+  object["machinceId"] = romTopic;
+  object["doorLock"] = rfid;
+  object["active"] = "1";
+  object["productAvailability"] = "1";
+  object["lastDispense"] = "20";
+  // Add the "location" object
+  JsonObject location = doc.createNestedObject("location");
+  location["lat"] = 12.03;
+  location["lon"] = 33.015;
+  String myURL = "http://api.vendy.store/2v0/MachineStatusPush";
+  char jsonChar[200];
+  serializeJson(doc, jsonChar);
+  postData(myURL,jsonChar);
+  delay(10);
+  doc.clear();
   }
 
 void user_ap(){  
@@ -567,7 +590,7 @@ void user_ap(){
 //void ledIndicator(){
 //  if(database_connected){
 //    if(default_status){
-//      digitalWrite(busy, HIGH);
+//      updateShiftRegister(blue);
 //      digitalWrite(connection, LOW);
 //      digitalWrite(disconnection, LOW);
 //    }
@@ -615,6 +638,26 @@ String read_String(char index)
   return String(data);
 }
 
+void MachineDeliveryConfirmation(){
+  DynamicJsonDocument doc(2048);
+  String romTopic=read_String(55);
+  JsonObject object = doc.to<JsonObject>();
+  object["dispanceStatus"] = "1";
+  object["trxid"] = "1";
+  object["command"] = "20";
+  object["topic"] = romTopic;
+  // Add the "location" object
+  JsonObject location = doc.createNestedObject("location");
+  location["lat"] = 12.03;
+  location["lon"] = 33.015;
+  String myURL = "http://api.vendy.store/2v0/MachineDeliveryConfirmation";
+  char jsonChar[200];
+  serializeJson(doc, jsonChar);
+  postData(myURL,jsonChar);
+  delay(10);
+  doc.clear();
+}
+
 void postData(String url, String object){
   if(WiFi.status()== WL_CONNECTED){
     Serial1.print("URL: ");
@@ -633,12 +676,12 @@ void postData(String url, String object){
       Serial1.println(httpCode);                          //Print HTTP return code
       http.end();                                         //Close connection
       if(httpCode==200){
-//        digitalWrite(buzzer,HIGH);
+        updateShiftRegister(buz);
         Serial1.println(httpCode);
         delay(100);
       }
       count++;
-//      digitalWrite(buzzer,LOW);
+      updateShiftRegister(default_val);
       delay(100);
     }while(httpCode < 0 && count < 2);
   }
