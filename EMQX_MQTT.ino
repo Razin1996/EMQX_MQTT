@@ -403,18 +403,18 @@ void playAudio(int audioIndex){
 }
 
 void loop() {
-//  Serial1.print("Analog: ");
-//  int adcValue=analogRead(rst);
-//  Serial1.println(adcValue);
-//  if(adcValue > 150){
-//    Serial1.println("Reset active");
-//    updateShiftRegister(red);
-//    delay(10);
-//  }else{
-//    Serial1.println("Reset inactive");
-//    updateShiftRegister(doorRed);
-//    delay(10);
-//  }
+  Serial1.print("Analog: ");
+  int adcValue=analogRead(rst);
+  Serial1.println(adcValue);
+  if(adcValue > 150){
+    Serial1.println("Reset active");
+    updateShiftRegister(red);
+    delay(10);
+  }else{
+    Serial1.println("Reset inactive");
+    updateShiftRegister(green);
+    delay(10);
+  }
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
@@ -548,7 +548,7 @@ void send_status(){
   String romTopic=read_String(55);
   JsonObject object = doc.to<JsonObject>();
   object["machinceId"] = romTopic;
-  object["doorLock"] = rfid;
+  object["doorLock"] = "";
   object["active"] = "1";
   object["productAvailability"] = "1";
   object["lastDispense"] = "20";
