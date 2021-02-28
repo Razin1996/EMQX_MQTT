@@ -217,7 +217,7 @@ void setup() {
     EEPROM.commit();
     delay(10);
   }else{
-    Serial1.println("Reset active");
+    Serial1.println("Reset inactive");
     updateShiftRegister(green);
     delay(10);
   }
@@ -287,7 +287,6 @@ void setup() {
   configMp3();
   
   //OLED Setup
-  Serial1.println("OLED FeatherWing test");
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // Address 0x3C for 128x32
   Serial1.println("OLED begun");
   display.display();
@@ -316,8 +315,18 @@ void configMQTT(){
   client.setCallback(callback);
   while (!client.connected()) {
     Serial1.println("Connecting to public emqx mqtt broker.....");
+//    display.setTextSize(1);
+//    display.setTextColor(SSD1306_WHITE);
+//    display.setCursor(0,0);
+//    display.print("Connecting to public emqx mqtt broker.....");
+//    display.display();
     if (client.connect(clientID)) {
       Serial1.println("Public emqx mqtt broker connected");
+//      display.setTextSize(1);
+//      display.setTextColor(SSD1306_WHITE);
+//      display.setCursor(0,0);
+//      display.print("Public emqx mqtt broker connected");
+//      display.display();
      } else {
        Serial1.print("failed with state ");
        Serial1.print(client.state());
@@ -468,14 +477,17 @@ void messageDecoderDispense(String response){
   deserializeJson(doc, response);
   JsonArray repos = doc["message"];
   int dis_quantity;
+  String dis_id;
   for (JsonObject repo : repos) {
     Serial1.println("");
     Serial1.print("Dispenser: ");
-    Serial1.println(repo["dispenser_id"].as<int>());
+    dis_id = repo["dispenser_id"].as<char*>();
+    Serial1.println(dis_id);
     dis_quantity = repo["quantity"].as<int>();
     //quantity = dis_quantity.toInt();
     Serial1.println(dis_quantity);
-    dispense(dis_quantity);
+//    writeString(300, response);
+    dispense(dis_quantity, response);
   }
 }
 
@@ -494,7 +506,10 @@ void readRFID(){
     rdm6300.end();
     delay(100);
     updateShiftRegister(buzGreen);
+    delay(200);
+    updateShiftRegister(blue);
     playAudio(1);
+    postRFID(rfId);
     rdm6300.begin(RDM6300_RX_PIN);
     updateShiftRegister(default_val);
   }
@@ -503,10 +518,14 @@ void readRFID(){
 void postRFID(String rfid){
   DynamicJsonDocument doc(2048);
   String romTopic=read_String(55);
+  String romDis_id=read_String(65);
+  String URL = "http://api.vendy.store/2v0/GetTransactionID";
   JsonObject object = doc.to<JsonObject>();
+  String trxid = getData(URL);
+  object["trxid"] = trxid;
   object["RfIdCardNo"] = rfid;
   object["machinceId"] = romTopic;
-  object["clientId"] = "snp01018";
+  object["dispenser"] = "1";
   String myURL = "http://api.vendy.store/2v0/OrderByRFID";
   char jsonChar[100];
   serializeJson(doc, jsonChar);
@@ -515,14 +534,16 @@ void postRFID(String rfid){
   doc.clear();
 }
 
-void dispense(int quantity){
-// Serial.begin(9600);
-// delay(10);
-// Serial.print(String(quantity));
-// Serial1.print("Command quantity: ");
-// Serial1.println(quantity);
-// playAudio(2);
-// Serial.end();
+void dispense(int quantity, String response){
+   Serial.begin(9600);
+   delay(10);
+   Serial.print(String(quantity));
+   Serial1.print("Command quantity: ");
+   Serial1.println(quantity);
+   playAudio(1);
+   Serial.end ();
+//   delay(1000);
+   machineDeliveryConfirmation(response);
 }
 
 void settings_change(String response){
@@ -642,22 +663,11 @@ String read_String(char index)
   return String(data);
 }
 
-void MachineDeliveryConfirmation(){
+void machineDeliveryConfirmation(String response){
   DynamicJsonDocument doc(2048);
-  String romTopic=read_String(55);
-  JsonObject object = doc.to<JsonObject>();
-  object["dispanceStatus"] = "1";
-  object["trxid"] = "1";
-  object["command"] = "20";
-  object["topic"] = romTopic;
-  // Add the "location" object
-  JsonObject location = doc.createNestedObject("location");
-  location["lat"] = 12.03;
-  location["lon"] = 33.015;
   String myURL = "http://api.vendy.store/2v0/MachineDeliveryConfirmation";
-  char jsonChar[200];
-  serializeJson(doc, jsonChar);
-  postData(myURL,jsonChar);
+  serializeJson(doc, response);
+  postData(myURL,response);
   delay(10);
   doc.clear();
 }
@@ -690,4 +700,43 @@ void postData(String url, String object){
     }while(httpCode < 0 && count < 2);
   }
   return;
+}
+
+String getData(String url){
+  String trxid;
+  if(WiFi.status()== WL_CONNECTED){
+      WiFiClient client;
+      Serial1.print("URL: ");
+      Serial1.println(url);
+      Serial1.print("Request Body: ");
+      HTTPClient http;
+      http.begin(client,url);
+      http.setTimeout(3000);
+      int httpCode = 0, count = 0;
+      // Send HTTP GET request
+      
+      do{
+        http.addHeader("Authorization", "Basic dmVuZHlVc2VyOlYjbmR5VVNlUg==");
+        http.addHeader("Cache-Control", "no-cache");
+        Serial1.print("HTTP Response code: ");
+        int httpResponseCode = http.GET();
+        Serial1.println(httpResponseCode);
+        String payload = http.getString();
+        Serial1.println(payload);                         //Print HTTP return code
+        http.end();                                         //Close connection
+        DynamicJsonDocument doc1(2048);
+        deserializeJson(doc1, payload);
+        trxid=String(doc1["data"]["trxid"].as<char*>());
+        doc1.clear();
+      if(httpCode==200){
+        updateShiftRegister(buz);
+        Serial1.println(httpCode);
+        delay(100);
+      }
+      count++;
+      updateShiftRegister(default_val);
+      delay(100);
+    }while(httpCode < 0 && count < 2);
+  }
+  return(trxid);
 }
