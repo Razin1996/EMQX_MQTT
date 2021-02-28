@@ -21,7 +21,7 @@
 
 //important comments
 /*
- * machineID=topic
+ * machineID=topic=ap_deviceID
  * writeString(35)=ap_userID
  * writeString(45)=ap_userPass
  * writeString(55)=ap_deviceID
@@ -439,6 +439,7 @@ void loop() {
       const char *topic = romTopic.c_str();
       client.subscribe(topic);
       readRFID();
+      Serial1.print("rfid moja: ");
       }
       client.loop();
       readRFID();
@@ -499,26 +500,21 @@ String commandDecoder(String response){
 }
 
 void readRFID(){
-  delay(10);
-  if (rdm6300.update()){
+  delay(10);  
+  if (rdm6300.update()){  
     String rfId= String(rdm6300.get_tag_id(),HEX);
     Serial1.println(rfId);
     rdm6300.end();
     delay(100);
-    updateShiftRegister(buzGreen);
-    delay(200);
-    updateShiftRegister(blue);
-    playAudio(1);
     postRFID(rfId);
     rdm6300.begin(RDM6300_RX_PIN);
-    updateShiftRegister(default_val);
   }
 }
 
 void postRFID(String rfid){
   DynamicJsonDocument doc(2048);
   String romTopic=read_String(55);
-  String romDis_id=read_String(65);
+//  String romDis_id=read_String(65);
   String URL = "http://api.vendy.store/2v0/GetTransactionID";
   JsonObject object = doc.to<JsonObject>();
   String trxid = getData(URL);
@@ -532,6 +528,7 @@ void postRFID(String rfid){
   postData(myURL,jsonChar);
   delay(10);
   doc.clear();
+  yield;
 }
 
 void dispense(int quantity, String response){
@@ -540,9 +537,13 @@ void dispense(int quantity, String response){
    Serial.print(String(quantity));
    Serial1.print("Command quantity: ");
    Serial1.println(quantity);
+   updateShiftRegister(buzGreen);
+   delay(100);
+   updateShiftRegister(blue);
    playAudio(1);
    Serial.end ();
 //   delay(1000);
+   updateShiftRegister(green);
    machineDeliveryConfirmation(response);
 }
 
@@ -587,6 +588,7 @@ void send_status(){
   postData(myURL,jsonChar);
   delay(10);
   doc.clear();
+  yield;
   }
 
 void user_ap(){  
@@ -670,6 +672,7 @@ void machineDeliveryConfirmation(String response){
   postData(myURL,response);
   delay(10);
   doc.clear();
+  yield;
 }
 
 void postData(String url, String object){
@@ -700,6 +703,7 @@ void postData(String url, String object){
     }while(httpCode < 0 && count < 2);
   }
   return;
+    yield;
 }
 
 String getData(String url){
@@ -739,4 +743,5 @@ String getData(String url){
     }while(httpCode < 0 && count < 2);
   }
   return(trxid);
+    yield;
 }
