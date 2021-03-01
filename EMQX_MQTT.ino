@@ -542,6 +542,7 @@ void dispense(int quantity, String response){
    updateShiftRegister(blue);
    playAudio(1);
    Serial.end ();
+   rdm6300.begin(RDM6300_RX_PIN);
 //   delay(1000);
    updateShiftRegister(green);
    machineDeliveryConfirmation(response);
