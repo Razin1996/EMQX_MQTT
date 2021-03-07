@@ -502,7 +502,7 @@ String commandDecoder(String response){
 void readRFID(){
   delay(10);  
   if (rdm6300.update()){  
-    String rfId= String(rdm6300.get_tag_id(),HEX);
+    String rfId= String(rdm6300.get_tag_id(),DEC);
     Serial1.println(rfId);
     rdm6300.end();
     delay(100);
@@ -669,6 +669,12 @@ String read_String(char index)
 void machineDeliveryConfirmation(String response){
   DynamicJsonDocument doc(2048);
   String myURL = "http://api.vendy.store/2v0/MachineDeliveryConfirmation";
+//  if(dispense == 0){
+//    object["dispanceStatus"] = "0";
+//  }
+//   else{
+//    object["dispanceStatus"] = "1";
+//   }
   serializeJson(doc, response);
   postData(myURL,response);
   delay(10);
