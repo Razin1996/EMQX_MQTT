@@ -523,7 +523,7 @@ void postRFID(String rfid){
   object["machinceId"] = romTopic;
   object["dispenser"] = "1";
   String myURL = "http://api.vendy.store/2v0/OrderByRFID";
-  char jsonChar[100];
+  char jsonChar[200];
   serializeJson(doc, jsonChar);
   postData(myURL,jsonChar);
   delay(10);
@@ -698,10 +698,11 @@ void postData(String url, String object){
       http.addHeader("Cache-Control", "no-cache");
       httpCode = http.POST(object);                       //Send the request
       Serial1.println(httpCode);                          //Print HTTP return code
+      String payload = http.getString();
       http.end();                                         //Close connection
       if(httpCode==200){
         updateShiftRegister(buz);
-        Serial1.println(httpCode);
+        Serial1.println(payload);
         delay(100);
       }
       count++;
