@@ -179,13 +179,14 @@ static const unsigned char PROGMEM logo_bmp[] =
 //////////////////////////////////////////////////////////////
 
 //Signal Output
-byte doorRed = 0b00000001;
-byte red = 0b00000101;
-byte green = 0b00001001;
-byte blue = 0b00000011;
-byte buz = 0b00000001;
-byte buzGreen = 0b00000001;
-byte default_val = 0b00000001;
+//byte doorRed =     0b00000001;
+byte red =         0b00000111;
+byte green =       0b00001011;
+byte blue =        0b00001101;
+byte buz =         0b00001110;
+byte buzBlue =     0b00001100;
+byte buzGreen =    0b00001010;
+byte default_val = 0b00001111;
 
 // Signal input
 //int res = 0;
@@ -217,7 +218,7 @@ void setup() {
     delay(10);
   }else{
     Serial1.println("Reset inactive");
-//    updateShiftRegister(green);
+    updateShiftRegister(green);
     delay(10);
   }
 
@@ -277,6 +278,7 @@ void setup() {
      configMQTT();
   }else{
    Serial1.println("Reset mode");
+   updateShiftRegister(blue);
  }
   rdm6300.begin(RDM6300_RX_PIN);
 //  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -300,17 +302,9 @@ void setup() {
   pinMode(latchPin, OUTPUT);
   pinMode(dataPin, OUTPUT);  
   pinMode(clockPin, OUTPUT);
-  updateShiftRegister(0b00000001);
-  delay(2000);
-  //test
-  updateShiftRegister(0b00000000);
-  delay(2000);
-  updateShiftRegister(0b00001101);
-  delay(2000);
-  updateShiftRegister(0b00001010);
-  delay(2000);
-  updateShiftRegister(0b00000111);
-  delay(2000);
+  updateShiftRegister(buz);
+  delay(500);
+  updateShiftRegister(red);
 }
 
 void configMQTT(){
@@ -329,6 +323,7 @@ void configMQTT(){
 //    display.setCursor(0,0);
 //    display.print("Connecting to public emqx mqtt broker.....");
 //    display.display();
+    updateShiftRegister(blue);
     if (client.connect(clientID)) {
       Serial1.println("Public emqx mqtt broker connected");
 //      display.setTextSize(1);
@@ -336,9 +331,13 @@ void configMQTT(){
 //      display.setCursor(0,0);
 //      display.print("Public emqx mqtt broker connected");
 //      display.display();
+      updateShiftRegister(buzGreen);
+      delay(500);
+      updateShiftRegister(green);
      } else {
        Serial1.print("failed with state ");
        Serial1.print(client.state());
+       updateShiftRegister(red);
        delay(2000);
      }
   }
@@ -363,13 +362,22 @@ void callback(char *topic, byte *payload, unsigned int length) {
    String command = commandDecoder(msgS);
    if(command == "DISPENSE"){
       Serial1.println("dispensing");
+      updateShiftRegister(buzBlue);
+      delay(500);
+      updateShiftRegister(green);
       messageDecoderDispense(msgS);
     }
     else if(command == "SETTINGS"){
       Serial1.println("settings changed");
+      updateShiftRegister(buzBlue);
+      delay(500);
+      updateShiftRegister(green);
       settings_change(msgS);
       }
     else if(command == "STATUS_QUERY"){
+      updateShiftRegister(buzBlue);
+      delay(500);
+      updateShiftRegister(green);
       send_status();
       }
     else if(command == "REFILL"){
@@ -413,18 +421,18 @@ void playAudio(int audioIndex){
   configMp3();
   if(Serial){
     mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
-    waitMilliseconds(10000);
+    waitMilliseconds(2000);
     mp3.end();
   }else{
     mp3.begin(9600); 
     mp3.playMp3FolderTrack(audioIndex);  // sd:/mp3/0001.mp3
-    waitMilliseconds(10000);
+    waitMilliseconds(2000);
     mp3.end();
   }
 }
 
 void loop() {
-  
+   updateShiftRegister(green);
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
@@ -435,18 +443,18 @@ void loop() {
       Serial1.println(romTopic);
       const char *topic = romTopic.c_str();
       client.subscribe(topic);
+//      updateShiftRegister(green);
       readRFID();
-      Serial1.print("rfid moja: ");
       }
       client.loop();
       readRFID();
-//      updateShiftRegister(green);
+      updateShiftRegister(green);
     }else{
       user_ap();
       readRFID();
     }
   }else{
-//      updateShiftRegister(red);
+      updateShiftRegister(red);
   }
   yield;
 }
@@ -482,7 +490,6 @@ void messageDecoderDispense(String response){
     Serial1.println(dis_id);
     dis_quantity = repo["quantity"].as<int>();
     Serial1.println(dis_quantity);
-    playAudio(1);
     dispense(dis_quantity, response);
   }
 }
@@ -496,6 +503,7 @@ String commandDecoder(String response){
 
 void readRFID(){
   delay(10);  
+  updateShiftRegister(blue);
   if (rdm6300.update()){  
     String rfId= String(rdm6300.get_tag_id(),DEC);
     Serial1.println(rfId);
@@ -527,19 +535,19 @@ void postRFID(String rfid){
 }
 
 void dispense(int quantity, String response){
+   playAudio(1);
    Serial.begin(9600);
    delay(10);
+   updateShiftRegister(buzBlue);
+   delay(100);
+   updateShiftRegister(blue);
    Serial.print(String(quantity));
    Serial1.print("Command quantity: ");
    Serial1.println(quantity);
-   updateShiftRegister(buzGreen);
-   delay(100);
-   updateShiftRegister(blue);
    Serial.end ();
    rdm6300.begin(RDM6300_RX_PIN);
-//   delay(1000);
-//   updateShiftRegister(green);
    machineDeliveryConfirmation(response);
+   updateShiftRegister(green);
 }
 
 void settings_change(String response){
@@ -587,6 +595,7 @@ void send_status(){
   }
 
 void user_ap(){  
+    updateShiftRegister(blue);
     String ssid=read_String(0);
     String pass=read_String(16);
     Serial1.print(ssid);
@@ -607,6 +616,7 @@ void user_ap(){
     Serial1.print("IP Address is : ");
     Serial1.println(WiFi.localIP());
     delay(1000);
+    updateShiftRegister(green);
 }
 
 
@@ -663,7 +673,6 @@ void postData(String url, String object){
     Serial1.println(url);
     Serial1.print("Request Body: ");
     Serial1.println(object);
-    playAudio(1);
     HTTPClient http;                                    //Declare object of class HTTPClient
     http.begin(url);
     http.setTimeout(3000);
@@ -677,12 +686,10 @@ void postData(String url, String object){
       String payload = http.getString();
       http.end();                                         //Close connection
       if(httpCode==200){
-        updateShiftRegister(buz);
         Serial1.println(payload);
         delay(100);
       }
       count++;
-      updateShiftRegister(default_val);
       delay(100);
     }while(httpCode < 0 && count < 2);
   }
@@ -717,12 +724,10 @@ String getData(String url){
         trxid=String(doc1["data"]["trxid"].as<char*>());
         doc1.clear();
       if(httpCode==200){
-        updateShiftRegister(buz);
         Serial1.println(httpCode);
         delay(100);
       }
       count++;
-      updateShiftRegister(default_val);
       delay(100);
     }while(httpCode < 0 && count < 2);
   }
