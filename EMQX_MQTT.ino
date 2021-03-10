@@ -71,7 +71,6 @@ String ap_deviceID;
 String ap_wifi_SSID;
 String ap_wifi_Pass;
 
-
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head>
@@ -113,7 +112,7 @@ void notFound(AsyncWebServerRequest *request) {
 //Mp3 Operation
 // implement a notification class,
 // its member methods will get called 
-//
+
 class Mp3Notify
 {
 public:
@@ -180,13 +179,13 @@ static const unsigned char PROGMEM logo_bmp[] =
 //////////////////////////////////////////////////////////////
 
 //Signal Output
-byte doorRed = 25;
-byte red = 9;
-byte green = 5;
-byte blue = 3;
-byte buz = 0;
-byte buzGreen = 4;
-byte default_val = 1;
+byte doorRed = 0b00000001;
+byte red = 0b00000101;
+byte green = 0b00001001;
+byte blue = 0b00000011;
+byte buz = 0b00000001;
+byte buzGreen = 0b00000001;
+byte default_val = 0b00000001;
 
 // Signal input
 //int res = 0;
@@ -218,7 +217,7 @@ void setup() {
     delay(10);
   }else{
     Serial1.println("Reset inactive");
-    updateShiftRegister(green);
+//    updateShiftRegister(green);
     delay(10);
   }
 
@@ -301,7 +300,17 @@ void setup() {
   pinMode(latchPin, OUTPUT);
   pinMode(dataPin, OUTPUT);  
   pinMode(clockPin, OUTPUT);
-  updateShiftRegister(0);
+  updateShiftRegister(0b00000001);
+  delay(2000);
+  //test
+  updateShiftRegister(0b00000000);
+  delay(2000);
+  updateShiftRegister(0b00001101);
+  delay(2000);
+  updateShiftRegister(0b00001010);
+  delay(2000);
+  updateShiftRegister(0b00000111);
+  delay(2000);
 }
 
 void configMQTT(){
@@ -337,7 +346,6 @@ void configMQTT(){
   Serial1.print("Topic in config: ");
   Serial1.println(topic);
   client.subscribe(topic);
-//  digitalWrite(red,HIGH);
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -416,18 +424,7 @@ void playAudio(int audioIndex){
 }
 
 void loop() {
-//  Serial1.print("Analog: ");
-//  int adcValue=analogRead(rst);
-//  Serial1.println(adcValue);
-//  if(adcValue > 150){
-//    Serial1.println("Reset active");
-//    updateShiftRegister(red);
-//    delay(10);
-//  }else{
-//    Serial1.println("Reset inactive");
-//    updateShiftRegister(green);
-//    delay(10);
-//  }
+  
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
@@ -443,14 +440,13 @@ void loop() {
       }
       client.loop();
       readRFID();
-      updateShiftRegister(green);
+//      updateShiftRegister(green);
     }else{
       user_ap();
       readRFID();
-//      digitalWrite(red,LOW);
     }
   }else{
-      updateShiftRegister(red);
+//      updateShiftRegister(red);
   }
   yield;
 }
@@ -542,7 +538,7 @@ void dispense(int quantity, String response){
    Serial.end ();
    rdm6300.begin(RDM6300_RX_PIN);
 //   delay(1000);
-   updateShiftRegister(green);
+//   updateShiftRegister(green);
    machineDeliveryConfirmation(response);
 }
 
