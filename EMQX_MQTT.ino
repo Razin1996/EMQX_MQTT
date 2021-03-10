@@ -485,9 +485,8 @@ void messageDecoderDispense(String response){
     dis_id = repo["dispenser_id"].as<char*>();
     Serial1.println(dis_id);
     dis_quantity = repo["quantity"].as<int>();
-    //quantity = dis_quantity.toInt();
     Serial1.println(dis_quantity);
-//    writeString(300, response);
+    playAudio(1);
     dispense(dis_quantity, response);
   }
 }
@@ -540,7 +539,6 @@ void dispense(int quantity, String response){
    updateShiftRegister(buzGreen);
    delay(100);
    updateShiftRegister(blue);
-   playAudio(1);
    Serial.end ();
    rdm6300.begin(RDM6300_RX_PIN);
 //   delay(1000);
@@ -615,25 +613,6 @@ void user_ap(){
     delay(1000);
 }
 
-//void ledIndicator(){
-//  if(database_connected){
-//    if(default_status){
-//      updateShiftRegister(blue);
-//      digitalWrite(connection, LOW);
-//      digitalWrite(disconnection, LOW);
-//    }
-//    else{
-//      digitalWrite(busy, LOW);
-//      digitalWrite(connection, HIGH);
-//      digitalWrite(disconnection, LOW);      
-//    }
-//  }
-//  else{
-//    digitalWrite(busy, LOW);
-//    digitalWrite(connection, LOW);
-//    digitalWrite(disconnection, HIGH);      
-//  }
-//}
 
 //EEPROM
 void writeString(char index,String data)
@@ -688,6 +667,7 @@ void postData(String url, String object){
     Serial1.println(url);
     Serial1.print("Request Body: ");
     Serial1.println(object);
+    playAudio(1);
     HTTPClient http;                                    //Declare object of class HTTPClient
     http.begin(url);
     http.setTimeout(3000);
