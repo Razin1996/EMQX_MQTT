@@ -296,7 +296,11 @@ void setup() {
   display.display();
   Serial1.println("IO test");
   
-  testdrawbitmap();
+//  testdrawbitmap();
+//  delay(1000);
+//  display.clearDisplay();
+//  display.display();
+
 
   // Shift Register
   pinMode(latchPin, OUTPUT);
@@ -436,6 +440,12 @@ void loop() {
    readRFID();
    if(EEPROM.read(100) == 55){
     if(WiFi.status() == WL_CONNECTED){
+      display.setTextSize(2);
+      display.setTextColor(SSD1306_WHITE);
+      display.setCursor(0,0);
+      display.println("IP Address : ");
+      display.println(WiFi.localIP());
+      display.display();
       if (!client.connected()) {
       client.connect("esp8266-vendy4");
       String romTopic=read_String(55);
@@ -503,7 +513,6 @@ String commandDecoder(String response){
 
 void readRFID(){
   delay(10);  
-  updateShiftRegister(blue);
   if (rdm6300.update()){  
     String rfId= String(rdm6300.get_tag_id(),DEC);
     Serial1.println(rfId);
@@ -515,6 +524,7 @@ void readRFID(){
 }
 
 void postRFID(String rfid){
+  updateShiftRegister(blue);
   DynamicJsonDocument doc(2048);
   String romTopic=read_String(55);
 //  String romDis_id=read_String(65);
@@ -536,7 +546,7 @@ void postRFID(String rfid){
 
 void dispense(int quantity, String response){
    playAudio(1);
-   Serial.begin(9600);
+   Serial.begin(115200);
    delay(10);
    updateShiftRegister(buzBlue);
    delay(100);
