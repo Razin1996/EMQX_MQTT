@@ -53,7 +53,7 @@ ESP8266WiFiMulti WifiMulti;
 Rdm6300 rdm6300;
 
 //AP Mode and Server Settings
-const char* ap_ssid = "NodeMCU";
+const char* ap_ssid = "Vendy Ltd.";
 const char* ap_pass = "123456789";
 IPAddress local_ip(192,168,1,1);
 IPAddress gateway(192,168,1,1);
