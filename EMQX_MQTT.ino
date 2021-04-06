@@ -180,12 +180,12 @@ static const unsigned char PROGMEM logo_bmp[] =
 
 //Signal Output
 //byte doorRed =     0b00000001;
-byte red =         0b00000111;
-byte green =       0b00001011;
-byte blue =        0b00001101;
+byte blue =        0b00000111;
+byte red =         0b00001011;
+byte green =       0b00001101;
 byte buz =         0b00001110;
-byte buzBlue =     0b00001100;
-byte buzGreen =    0b00001010;
+byte buzBlue =     0b00000110;
+byte buzGreen =    0b00001100;
 byte default_val = 0b00001111;
 
 // Signal input
