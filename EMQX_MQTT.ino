@@ -218,7 +218,7 @@ void setup() {
     delay(10);
   }else{
     Serial1.println("Reset inactive");
-    updateShiftRegister(green);
+    updateShiftRegister(blue);
     delay(10);
   }
 
@@ -309,6 +309,8 @@ void setup() {
   updateShiftRegister(buz);
   delay(500);
   updateShiftRegister(red);
+
+  playAudio(2);
 }
 
 void configMQTT(){
@@ -459,7 +461,6 @@ void loop() {
       readRFID();
       }
       client.loop();
-//      readRFID();
       updateShiftRegister(green);
     }else{
       user_ap();
@@ -467,6 +468,7 @@ void loop() {
     }
   }else{
       updateShiftRegister(red);
+      delay(1000);
   }
   yield;
 }
