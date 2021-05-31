@@ -447,7 +447,9 @@ void loop() {
       display.println(WiFi.localIP());
       display.display();
       if (!client.connected()) {
-      client.connect("esp8266-vendy4");
+      String romClient=read_String(55);
+      const char *clientID = romClient.c_str();
+      client.connect(clientID);
       String romTopic=read_String(55);
       Serial1.print("Topic in Loop: ");
       Serial1.println(romTopic);
@@ -457,7 +459,7 @@ void loop() {
       readRFID();
       }
       client.loop();
-      readRFID();
+//      readRFID();
       updateShiftRegister(green);
     }else{
       user_ap();
