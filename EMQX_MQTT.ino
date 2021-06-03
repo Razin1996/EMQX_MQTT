@@ -70,6 +70,7 @@ String ap_userPass;
 String ap_deviceID;
 String ap_wifi_SSID;
 String ap_wifi_Pass;
+String trxid;
 
 // HTML web page to handle 3 input fields (input1, input2, input3)
 const char index_html[] PROGMEM = R"rawliteral(
@@ -370,8 +371,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
       Serial1.println("dispensing");
       updateShiftRegister(buzBlue);
       delay(500);
-      updateShiftRegister(green);
-      messageDecoderDispense(msgS);
+      updateShiftRegister(blue);
+//      updateShiftRegister(green);
+        messageDecoderDispense(msgS);
     }
     else if(command == "SETTINGS"){
       Serial1.println("settings changed");
@@ -490,13 +492,14 @@ void testdrawbitmap(void) {
   display.display();
   delay(1000);
 }
-
+String prev_trix;
 void messageDecoderDispense(String response){
   DynamicJsonDocument doc(2048);
   deserializeJson(doc, response);
   JsonArray repos = doc["message"];
   int dis_quantity;
   String dis_id;
+  String trx_id = String(doc["trxid"].as<char*>());
   for (JsonObject repo : repos) {
     Serial1.println("");
     Serial1.print("Dispenser: ");
@@ -504,7 +507,12 @@ void messageDecoderDispense(String response){
     Serial1.println(dis_id);
     dis_quantity = repo["quantity"].as<int>();
     Serial1.println(dis_quantity);
-    dispense(dis_quantity, response);
+    Serial1.print("MQTT: ");
+    Serial1.println(trx_id);
+    if(!prev_trix.equals(trx_id)){
+      dispense(dis_quantity, response);
+      prev_trix=trx_id;
+    }
   }
 }
 
@@ -514,10 +522,11 @@ String commandDecoder(String response){
   auto command = doc["command"].as<char*>();
   return command;
 }
-
+bool readEnable=true;
 void readRFID(){
   delay(10);  
-  if (rdm6300.update()){  
+  if (rdm6300.update()&& readEnable==true){
+    readEnable=false;  
     String rfId= String(rdm6300.get_tag_id(),DEC);
     Serial1.println(rfId);
     rdm6300.end();
@@ -542,7 +551,7 @@ void postRFID(String rfid){
   String myURL = "http://api.vendy.store/2v0/OrderByRFID";
   char jsonChar[200];
   serializeJson(doc, jsonChar);
-  postData(myURL,jsonChar);
+  postData(myURL,jsonChar,1);
   delay(10);
   doc.clear();
   yield;
@@ -561,7 +570,8 @@ void dispense(int quantity, String response){
    Serial.end ();
    rdm6300.begin(RDM6300_RX_PIN);
    machineDeliveryConfirmation(response);
-   updateShiftRegister(green);
+//   updateShiftRegister(green);
+//   readEnable=true;
 }
 
 void settings_change(String response){
@@ -602,7 +612,7 @@ void send_status(){
   String myURL = "http://api.vendy.store/2v0/MachineStatusPush";
   char jsonChar[200];
   serializeJson(doc, jsonChar);
-  postData(myURL,jsonChar);
+  postData(myURL,jsonChar,2);
   delay(10);
   doc.clear();
   yield;
@@ -675,13 +685,15 @@ void machineDeliveryConfirmation(String response){
 //    object["dispanceStatus"] = "1";
 //   }
   serializeJson(doc, response);
-  postData(myURL,response);
+  postData(myURL,response,3);
   delay(10);
   doc.clear();
   yield;
 }
-
-void postData(String url, String object){
+//source=1 send RFID
+//source=1 send status
+//source=1 send delivery confirmation
+void postData(String url, String object, int source){
   if(WiFi.status()== WL_CONNECTED){
     Serial1.print("URL: ");
     Serial1.println(url);
@@ -702,6 +714,10 @@ void postData(String url, String object){
       if(httpCode==200){
         Serial1.println(payload);
         delay(100);
+        if(source==3){
+          readEnable=true;
+          updateShiftRegister(green);
+        }
       }
       count++;
       delay(100);
@@ -710,9 +726,7 @@ void postData(String url, String object){
   return;
     yield;
 }
-
 String getData(String url){
-  String trxid;
   if(WiFi.status()== WL_CONNECTED){
       WiFiClient client;
       Serial1.print("URL: ");
